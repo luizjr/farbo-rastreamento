@@ -36,6 +36,7 @@ React
 - [Observabilidade](#observabilidade)
 - [Desenvolvimento](#desenvolvimento)
 - [Configuração](#configuração)
+- [Licença e marca](#licença-e-marca)
 
 ---
 
@@ -997,3 +998,18 @@ mais importam:
 - [`docs/J16.md`](docs/J16.md) — configuração completa do rastreador J16 (GT06
   desbloqueado): comandos SMS, senha padrão, fiação e integração com os
   `commandOverrides` deste projeto
+
+---
+
+## Licença e marca
+
+O código é aberto, sob a [Apache License 2.0](LICENSE): pode ser usado,
+modificado e redistribuído, inclusive comercialmente, mantendo o `LICENSE` e o
+[`NOTICE`](NOTICE).
+
+A marca não faz parte da licença. Os nomes **FARBO RASTREADORES** e **FARBO
+RASTREAMENTO**, os logotipos, as imagens de `frontend/public/assets/` e a
+identidade visual (paleta de cores e aparência) são de uso exclusivo da Farbo
+Rastreadores. Quem reutilizar o código precisa trocar nome, logotipos e cores
+antes de publicar o produto. O que é livre, o que é reservado e onde fica cada
+item no código estão em [`MARCA.md`](MARCA.md).

@@ -1,0 +1,21 @@
+Farbo Rastreadores — plataforma de rastreamento veicular
+Copyright 2026 Pedro Farbo (Farbo Rastreadores)
+
+Este produto inclui software desenvolvido para a Farbo Rastreadores,
+distribuído sob a Apache License, Version 2.0 (arquivo LICENSE).
+
+MARCAS E IDENTIDADE VISUAL — NÃO LICENCIADAS
+
+A licença cobre apenas o código-fonte. Os nomes "FARBO RASTREADORES",
+"FARBO RASTREAMENTO" e "Farbo" como nome de produto ou serviço, os logotipos,
+as imagens de marca e a identidade visual (paleta de cores, combinação de
+cores e aparência do produto) são de uso exclusivo da Farbo Rastreadores e
+não são licenciados pela Apache License 2.0 (ver a seção 6 da licença).
+
+Quem reutilizar este código deve remover o nome, os logotipos e a paleta de
+cores da marca antes de distribuir ou publicar o produto. Regras completas em
+MARCA.md.
+
+Marcas de terceiros citadas no código ou na documentação (por exemplo,
+Melhor Envios, AbacatePay, OpenStreetMap, Insanos MC e fabricantes de
+rastreadores) pertencem aos respectivos titulares.
