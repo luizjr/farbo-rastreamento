@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/farbo/tracker-platform/backend/internal/audit"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/audit"
 )
 
 // handleConnections lista as sessões TCP abertas com rastreadores.

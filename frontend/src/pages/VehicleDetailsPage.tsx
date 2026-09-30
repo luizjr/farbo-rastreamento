@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Address } from '@/components/ui/Address';
 
 import { vehiclesApi } from '@/api/resources';
+import { SuspendedNotice, isSuspendedError } from '@/components/billing/SuspendedNotice';
 import { TrackerMap } from '@/components/map/TrackerMap';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -17,6 +18,7 @@ import { EventList } from '@/components/vehicle/EventList';
 import { Playback } from '@/components/vehicle/Playback';
 import { TelemetryBar } from '@/components/vehicle/TelemetryBar';
 import { useVehicle } from '@/hooks/useVehicles';
+import { useAuth } from '@/stores/AuthContext';
 import {
   formatCoordinates,
   formatDateTime,
@@ -35,11 +37,15 @@ const RANGES = [
   { label: '12 h', hours: 12 },
   { label: '24 h', hours: 24 },
   { label: '7 d', hours: 24 * 7 },
+  { label: '14 d', hours: 24 * 14 },
+  { label: '30 d', hours: 24 * 30 },
 ] as const;
 
 export function VehicleDetailsPage() {
   const { id } = useParams<{ id: string }>();
-  const { data: vehicle, isLoading } = useVehicle(id);
+  const { data: vehicle, isLoading, error } = useVehicle(id);
+  const { isCustomer } = useAuth();
+  const backTo = isCustomer ? '/meus-veiculos' : '/dashboard';
 
   const [rangeHours, setRangeHours] = useState<number | null>(null);
   const [frame, setFrame] = useState<Position | null>(null);
@@ -71,11 +77,12 @@ export function VehicleDetailsPage() {
   });
 
   if (isLoading) return <Spinner label="Carregando veículo" />;
+  if (isSuspendedError(error)) return <SuspendedNotice message={(error as Error).message} />;
   if (!vehicle) {
     return (
       <EmptyState
         title="Veículo não encontrado"
-        description={<Link to="/">Voltar ao painel</Link>}
+        description={<Link to={backTo}>Voltar</Link>}
       />
     );
   }
@@ -110,7 +117,7 @@ export function VehicleDetailsPage() {
             >
               {formatDeviceStatus(device?.status)}
             </Badge>
-            <Link to="/">
+            <Link to={backTo}>
               <Button size="small" variant="ghost">
                 Voltar
               </Button>
@@ -130,7 +137,8 @@ export function VehicleDetailsPage() {
           >
             Ao vivo
           </button>
-          {RANGES.map((option) => (
+          {/* Só os períodos que cabem no histórico guardado do veículo. */}
+          {RANGES.filter((option) => option.hours <= (vehicle.historyDays || 30) * 24).map((option) => (
             <button
               key={option.hours}
               type="button"
@@ -141,6 +149,9 @@ export function VehicleDetailsPage() {
             </button>
           ))}
 
+          {rangeHours === null && vehicle.historyDays > 0 && (
+            <span className={styles.sampleNote}>Histórico guardado por {vehicle.historyDays} dias</span>
+          )}
           {history.data && rangeHours !== null && (
             <span className={styles.sampleNote}>
               {history.data.returned} de {history.data.total} pontos
@@ -225,7 +236,7 @@ export function VehicleDetailsPage() {
               <Info label="IMEI" value={device.imei} mono />
               <Info label="Protocolo" value={device.protocol || 'ainda não detectado'} mono />
               <Info label="Firmware" value={device.firmware || '—'} />
-              <Info label="Linha" value={device.phoneNumber || '—'} />
+              {!isCustomer && <Info label="Linha" value={device.phoneNumber || '—'} />}
               <Info label="Última comunicação" value={formatDateTime(device.lastSeenAt)} />
               <Info label="Conexão" value={vehicle.connected ? 'aberta' : 'fechada'} />
             </div>

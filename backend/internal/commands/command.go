@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/farbo/tracker-platform/backend/internal/database"
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
 )
 
 // Estados de um comando (§13).

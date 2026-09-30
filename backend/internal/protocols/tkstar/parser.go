@@ -24,7 +24,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
 )
 
 // maxTextFrame limita o tamanho de uma linha antes de considerá-la lixo (§7).

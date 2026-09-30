@@ -36,9 +36,15 @@ type Message struct {
 	origin string
 }
 
+// Filter decide se uma mensagem vai para um cliente. Nulo entrega tudo (a
+// equipe da central); o cliente final recebe só o que é dos veículos dele.
+// Roda a cada mensagem, dentro do broadcast: precisa ser rápido.
+type Filter func(Message) bool
+
 type client struct {
-	send chan []byte
-	id   uuid.UUID
+	send   chan []byte
+	id     uuid.UUID
+	filter Filter
 }
 
 // Hub mantém os clientes conectados e distribui as mensagens.
@@ -111,6 +117,9 @@ func (h *Hub) broadcast(msg Message) {
 
 	h.mu.RLock()
 	for c := range h.clients {
+		if c.filter != nil && !c.filter(msg) {
+			continue
+		}
 		select {
 		case c.send <- payload:
 		default:
@@ -157,32 +166,4 @@ func (h *Hub) notify(total int) {
 	if h.onCount != nil {
 		h.onCount(total)
 	}
-}
-
-// MarshalJSON e UnmarshalJSON preservam o campo origin na replicação.
-type wireMessage struct {
-	Type      string     `json:"type"`
-	VehicleID *uuid.UUID `json:"vehicleId,omitempty"`
-	DeviceID  *uuid.UUID `json:"deviceId,omitempty"`
-	Timestamp time.Time  `json:"timestamp"`
-	Data      any        `json:"data,omitempty"`
-	Origin    string     `json:"origin"`
-}
-
-func encodeForWire(msg Message) ([]byte, error) {
-	return json.Marshal(wireMessage{
-		Type: msg.Type, VehicleID: msg.VehicleID, DeviceID: msg.DeviceID,
-		Timestamp: msg.Timestamp, Data: msg.Data, Origin: msg.origin,
-	})
-}
-
-func decodeFromWire(payload []byte) (Message, error) {
-	var w wireMessage
-	if err := json.Unmarshal(payload, &w); err != nil {
-		return Message{}, err
-	}
-	return Message{
-		Type: w.Type, VehicleID: w.VehicleID, DeviceID: w.DeviceID,
-		Timestamp: w.Timestamp, Data: w.Data, origin: w.Origin,
-	}, nil
 }

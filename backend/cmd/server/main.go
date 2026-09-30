@@ -11,30 +11,42 @@ import (
 	"os/signal"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/farbo/tracker-platform/backend/internal/api"
-	"github.com/farbo/tracker-platform/backend/internal/audit"
-	"github.com/farbo/tracker-platform/backend/internal/auth"
-	"github.com/farbo/tracker-platform/backend/internal/commands"
-	"github.com/farbo/tracker-platform/backend/internal/config"
-	"github.com/farbo/tracker-platform/backend/internal/database"
-	"github.com/farbo/tracker-platform/backend/internal/devices"
-	"github.com/farbo/tracker-platform/backend/internal/events"
-	"github.com/farbo/tracker-platform/backend/internal/geocoding"
-	"github.com/farbo/tracker-platform/backend/internal/geofences"
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
-	"github.com/farbo/tracker-platform/backend/internal/protocols/gt06"
-	"github.com/farbo/tracker-platform/backend/internal/protocols/h02"
-	"github.com/farbo/tracker-platform/backend/internal/protocols/tkstar"
-	"github.com/farbo/tracker-platform/backend/internal/tcp"
-	"github.com/farbo/tracker-platform/backend/internal/telemetry"
-	"github.com/farbo/tracker-platform/backend/internal/tracking"
-	"github.com/farbo/tracker-platform/backend/internal/vehicles"
-	ws "github.com/farbo/tracker-platform/backend/internal/websocket"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/addresses"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/api"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/audit"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/auth"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/billing"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/commands"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/config"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/devices"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/events"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/fulfillment"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/geocoding"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/geofences"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/installers"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/mail"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/melhorenvio"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/orders"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/payments"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/payments/abacatepay"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols/gt06"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols/h02"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols/tkstar"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/realtime"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/retention"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/tcp"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/telemetry"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/tracking"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/vehicles"
+	ws "github.com/pedrofarbo/farbo-rastreamento/backend/internal/websocket"
 )
 
 func main() {
@@ -81,6 +93,16 @@ func run() error {
 		return fmt.Errorf("aplicando migrations: %w", err)
 	}
 
+	// Pool separado para o que os rastreadores gravam (posição, estado,
+	// último contato): por padrão sem esperar o fsync do disco — ver
+	// database.ConnectTelemetry. Faturas, pagamentos e cadastros ficam no
+	// pool principal, com commit síncrono.
+	telemetryDB, err := database.ConnectTelemetry(ctx, cfg.Postgres)
+	if err != nil {
+		return err
+	}
+	defer telemetryDB.Close()
+
 	// ---- Protocolos ----
 	//
 	// A ordem importa: a detecção usa o primeiro adaptador que reconhecer o
@@ -113,7 +135,7 @@ func run() error {
 			_ = redisClient.Close()
 			redisClient = nil
 		} else {
-			bridge := ws.NewBridge(redisClient, hub, log)
+			bridge := ws.NewBridge(redisClient, hub, cfg.Auth.JWTSecret, realtime.Decode, log)
 			go bridge.Run(ctx)
 			defer func() { _ = redisClient.Close() }()
 		}
@@ -121,9 +143,10 @@ func run() error {
 
 	// ---- Repositórios e serviços ----
 	deviceRepo := devices.NewRepository(db)
+	deviceRepo.UseTelemetry(telemetryDB)
 	vehicleRepo := vehicles.NewRepository(db)
-	positionRepo := tracking.NewRepository(db)
-	stateRepo := tracking.NewStateRepository(db)
+	positionRepo := tracking.NewRepository(telemetryDB)
+	stateRepo := tracking.NewStateRepository(telemetryDB)
 	eventRepo := events.NewRepository(db)
 	commandRepo := commands.NewRepository(db)
 	geofenceRepo := geofences.NewRepository(db)
@@ -131,15 +154,34 @@ func run() error {
 	userRepo := auth.NewRepository(db)
 	rawRepo := tracking.NewRawPacketRepository(db)
 
-	authSvc := auth.NewService(userRepo, cfg.Auth, log)
+	mailer, err := newMailSender(cfg, log)
+	if err != nil {
+		return err
+	}
+	authSvc := auth.NewService(userRepo, cfg.Auth, mail.NewAccountMailer(mailer, cfg.Mail.AppURL), log)
 	if err := authSvc.EnsureBootstrapUser(ctx, cfg.Bootstrap); err != nil {
 		return err
 	}
+
+	billingSvc, err := billing.NewService(billing.NewRepository(db), cfg.Billing, log)
+	if err != nil {
+		return err
+	}
+
+	// Quem é dono de cada veículo: o WebSocket filtra por aqui o que cada
+	// cliente recebe.
+	ownerIndex := vehicles.NewOwnerIndex(db, log)
+	if err := ownerIndex.Refresh(ctx); err != nil {
+		return fmt.Errorf("carregando os donos dos veículos: %w", err)
+	}
+	go ownerIndex.Run(ctx, 15*time.Second)
 
 	deviceSvc := devices.NewService(deviceRepo, registry)
 	vehicleSvc := vehicles.NewService(vehicleRepo)
 	eventSvc := events.NewService(eventRepo, hub, log)
 	auditSvc := audit.NewService(auditRepo, log)
+	paymentsSvc := payments.NewService(payments.NewRepository(db), billingSvc,
+		newPaymentGateway(cfg, log), auditSvc, cfg.Payments, log)
 	geofenceSvc := geofences.NewService(geofenceRepo)
 	if err := geofenceSvc.Refresh(ctx); err != nil {
 		return fmt.Errorf("carregando cercas: %w", err)
@@ -149,6 +191,28 @@ func run() error {
 	// política de uso do Nominatim — evita mais uma variável de ambiente só
 	// para isso.
 	geocodingSvc := geocoding.NewService(cfg.Bootstrap.AdminEmail, log)
+
+	// Envio do rastreador pelo Melhor Envios. Sem credencial, o acompanhamento
+	// funciona igual; só a compra de etiqueta e o rastreio automático ficam
+	// desligados.
+	carrierStore, err := melhorenvio.NewDBStore(db, string(cfg.Auth.JWTSecret))
+	if err != nil {
+		return err
+	}
+	var carrier *melhorenvio.Client
+	if cfg.Shipping.Enabled() {
+		carrier = melhorenvio.New(melhorenvio.Config{
+			BaseURL:  melhorenvio.BaseURLFor(cfg.Shipping.Sandbox, cfg.Shipping.BaseURL),
+			ClientID: cfg.Shipping.ClientID, ClientSecret: cfg.Shipping.ClientSecret,
+			RedirectURL: cfg.Shipping.RedirectURL, ContactEmail: cfg.Shipping.ContactEmail,
+			StaticToken: cfg.Shipping.Token,
+		}, carrierStore)
+		log.Info("envio pelo Melhor Envios ligado", "sandbox", cfg.Shipping.Sandbox)
+	}
+	retentionSvc := retention.NewService(db, cfg.Tracking.HistoryRetentionDays, log)
+	fulfillmentSvc := fulfillment.NewService(db, fulfillment.NewRepository(db), carrier,
+		fulfillment.MailNotifier{Mailer: mail.NewShipmentMailer(mailer, cfg.Mail.AppURL)},
+		cfg.Shipping, cfg.Catalog.EquipmentName, log)
 
 	stateStore := tracking.NewStateStore(stateRepo)
 	if err := stateStore.Load(ctx); err != nil {
@@ -177,7 +241,13 @@ func run() error {
 		Config: cfg, Log: log, Metrics: metrics, DB: db,
 		Auth: authSvc, Devices: deviceSvc, Vehicles: vehicleSvc,
 		Geofences: geofenceSvc, Geocoder: geocodingSvc, Events: eventSvc, Commands: commandSvc,
-		Audit: auditSvc, Positions: positionRepo, States: stateStore,
+		Audit: auditSvc, Billing: billingSvc, Payments: paymentsSvc, Owners: ownerIndex,
+		Orders:      orders.NewService(db, billingSvc, vehicleSvc, cfg.Catalog, log),
+		Installers:  installers.NewRepository(db),
+		Addresses:   addresses.NewRepository(db),
+		Fulfillment: fulfillmentSvc, Carrier: carrier, CarrierStore: carrierStore,
+		Retention: retentionSvc,
+		Positions: positionRepo, States: stateStore,
 		Raw: rawRepo, Ingestor: ingestor, Conns: connManager, Registry: registry,
 		WS: ws.NewHandler(hub, cfg.HTTP.CORSOrigins), Hub: hub,
 	})
@@ -205,7 +275,7 @@ func run() error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		runWorkers(ctx, cfg, ingestor, commandSvc, authSvc, rawRepo, geocodingSvc, log)
+		runWorkers(ctx, cfg, ingestor, commandSvc, authSvc, billingSvc, paymentsSvc, fulfillmentSvc, retentionSvc, rawRepo, geocodingSvc, log)
 	}()
 
 	log.Info("plataforma no ar",
@@ -231,6 +301,10 @@ func runWorkers(
 	ingestor *tracking.Ingestor,
 	commandSvc *commands.Service,
 	authSvc *auth.Service,
+	billingSvc *billing.Service,
+	paymentsSvc *payments.Service,
+	fulfillmentSvc *fulfillment.Service,
+	retentionSvc *retention.Service,
 	rawRepo *tracking.RawPacketRepository,
 	geocodingSvc *geocoding.Service,
 	log *slog.Logger,
@@ -238,12 +312,42 @@ func runWorkers(
 	statusTicker := time.NewTicker(cfg.Tracking.StatusSweepInterval)
 	commandTicker := time.NewTicker(cfg.Commands.SweepInterval)
 	cleanupTicker := time.NewTicker(6 * time.Hour)
+	// As faturas vencem por dia; conferir de hora em hora basta para a fatura
+	// nova aparecer no mesmo dia em que entra na antecedência configurada.
+	billingTicker := time.NewTicker(time.Hour)
+	// Reconsulta os Pix pendentes: dá baixa mesmo quando o webhook não chega.
+	paymentsTicker := time.NewTicker(time.Minute)
+	defer paymentsTicker.Stop()
+	// Rastreio das etiquetas a caminho (o webhook, quando configurado,
+	// adianta; isto garante mesmo sem ele).
+	shippingTicker := time.NewTicker(cfg.Shipping.SyncInterval)
+	defer shippingTicker.Stop()
+	// Apaga o histórico que passou do prazo de cada veículo (7, 14 ou 30 dias).
+	historyTicker := time.NewTicker(cfg.Tracking.HistoryCleanupInterval)
+	defer historyTicker.Stop()
+	// Em segundo plano e uma de cada vez: uma limpeza grande (depois de muito
+	// tempo parado, por exemplo) não pode atrasar as outras rotinas.
+	var cleaning atomic.Bool
+	cleanHistory := func() {
+		if !cleaning.CompareAndSwap(false, true) {
+			return
+		}
+		go func() {
+			defer cleaning.Store(false)
+			if _, err := retentionSvc.Cleanup(ctx); err != nil && ctx.Err() == nil {
+				log.Error("falha ao apagar o histórico vencido", "err", err)
+			}
+		}()
+	}
+	cleanHistory()
 	defer statusTicker.Stop()
 	defer commandTicker.Stop()
 	defer cleanupTicker.Stop()
+	defer billingTicker.Stop()
 
 	// Primeira varredura imediata para o painel já abrir com o status correto.
 	ingestor.SweepStatuses(ctx)
+	billingSvc.GenerateInvoices(ctx)
 
 	for {
 		select {
@@ -256,6 +360,26 @@ func runWorkers(
 		case <-commandTicker.C:
 			commandSvc.SweepTimeouts(ctx)
 
+		case <-billingTicker.C:
+			billingSvc.GenerateInvoices(ctx)
+
+		case <-paymentsTicker.C:
+			paymentsSvc.SyncPending(ctx)
+
+		case <-historyTicker.C:
+			cleanHistory()
+
+		case <-shippingTicker.C:
+			if changed, err := fulfillmentSvc.Sync(ctx); err != nil {
+				if errors.Is(err, melhorenvio.ErrNotConnected) {
+					log.Warn("rastreio pausado: Melhor Envios não conectado")
+				} else {
+					log.Error("falha ao consultar o rastreio no Melhor Envios", "err", err)
+				}
+			} else if changed > 0 {
+				log.Info("rastreio atualizado", "count", changed)
+			}
+
 		case <-cleanupTicker.C:
 			authSvc.CleanupExpiredTokens(ctx)
 			geocodingSvc.PurgeExpired()
@@ -267,6 +391,44 @@ func runWorkers(
 			}
 		}
 	}
+}
+
+// newPaymentGateway liga o Pix pela AbacatePay quando há chave. A chave nunca
+// vai para o log; só o modo (testes ou produção).
+func newPaymentGateway(cfg *config.Config, log *slog.Logger) payments.Gateway {
+	p := cfg.Payments
+	if !p.Enabled() {
+		log.Warn("ABACATEPAY_API_KEY não definida: pagamento das faturas por Pix desligado")
+		return nil
+	}
+	mode := "produção"
+	if abacatepay.IsDevKey(p.AbacatePayAPIKey) {
+		mode = "testes (devMode)"
+	}
+	if p.WebhookSecret == "" {
+		log.Warn("ABACATEPAY_WEBHOOK_SECRET vazio: webhooks recusados; a baixa vem só da consulta periódica")
+	}
+	log.Info("pagamento por Pix via AbacatePay", "modo", mode, "webhook", p.WebhookSecret != "",
+		"validade_pix", p.PixExpiresIn.String())
+	return abacatepay.NewClient(p.AbacatePayBaseURL, p.AbacatePayAPIKey)
+}
+
+// newMailSender escolhe como os e-mails saem: por SMTP quando configurado;
+// senão só para o log (com o conteúdo apenas em desenvolvimento).
+func newMailSender(cfg *config.Config, log *slog.Logger) (mail.Sender, error) {
+	if !cfg.Mail.Enabled() {
+		log.Warn("SMTP_HOST não definido: e-mails de redefinição de senha não serão enviados",
+			"app_url", cfg.Mail.AppURL)
+		return mail.NewLogSender(log, cfg.Env == "development"), nil
+	}
+	sender, err := mail.NewSMTPSender(cfg.Mail)
+	if err != nil {
+		return nil, err
+	}
+	log.Info("envio de e-mail por SMTP",
+		"host", cfg.Mail.SMTPHost, "port", cfg.Mail.SMTPPort, "tls", cfg.Mail.SMTPTLS,
+		"app_url", cfg.Mail.AppURL)
+	return sender, nil
 }
 
 // commandSender adapta o gerenciador de conexões à interface do módulo de

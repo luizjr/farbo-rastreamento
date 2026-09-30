@@ -1,0 +1,292 @@
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate } from 'react-router-dom';
+
+import { customersApi } from '@/api/resources';
+import billing from '@/components/billing/Billing.module.css';
+import { CustomerStatus } from '@/components/billing/InvoiceStatus';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { TextField } from '@/components/ui/Field';
+import fieldStyles from '@/components/ui/Field.module.css';
+import { Modal } from '@/components/ui/Modal';
+import { Spinner } from '@/components/ui/Spinner';
+import { useToast } from '@/components/ui/Toast';
+import { formatMoney } from '@/services/format';
+
+import styles from '../Page.module.css';
+
+interface CustomerDraft {
+  name: string;
+  email: string;
+  phone: string;
+  document: string;
+  access: 'invite' | 'password';
+  password: string;
+}
+
+const EMPTY: CustomerDraft = {
+  name: '',
+  email: '',
+  phone: '',
+  document: '',
+  access: 'invite',
+  password: '',
+};
+
+/** Clientes da central: lista com a situação financeira e cadastro. */
+export function CustomersPage() {
+  const navigate = useNavigate();
+  const { notify } = useToast();
+  const queryClient = useQueryClient();
+
+  const [search, setSearch] = useState('');
+  const [draft, setDraft] = useState<CustomerDraft | null>(null);
+  const [formError, setFormError] = useState('');
+
+  const customers = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
+
+  const create = useMutation({
+    mutationFn: customersApi.create,
+    onSuccess: (customer, input) => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      notify({
+        tone: 'success',
+        title: 'Cliente cadastrado',
+        description: `${
+          input.password ? 'Passe a senha ao cliente por um canal seguro.' : `Convite enviado para ${customer.email}.`
+        } Agora inclua o primeiro veículo em Novo veículo.`,
+      });
+      setDraft(null);
+      navigate(`/clientes/${customer.id}`);
+    },
+    onError: (error: Error) => setFormError(error.message),
+  });
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const list = customers.data ?? [];
+    if (!term) return list;
+    return list.filter((c) =>
+      [c.name, c.email, c.document, c.phone].some((value) => value.toLowerCase().includes(term)),
+    );
+  }, [customers.data, search]);
+
+  const submit = () => {
+    if (!draft) return;
+    setFormError('');
+    create.mutate({
+      name: draft.name,
+      email: draft.email,
+      phone: draft.phone,
+      document: draft.document,
+      password: draft.access === 'password' ? draft.password : '',
+    });
+  };
+
+  const totals = (customers.data ?? []).reduce(
+    (acc, c) => ({
+      open: acc.open + c.openAmountCents,
+      overdue: acc.overdue + (c.overdueInvoices > 0 ? 1 : 0),
+      suspended: acc.suspended + (c.suspended ? 1 : 0),
+    }),
+    { open: 0, overdue: 0, suspended: 0 },
+  );
+
+  return (
+    <div className={styles.page}>
+      <div className={styles.inner}>
+        <header className={styles.header}>
+          <div>
+            <h1 className={styles.title}>Clientes</h1>
+            <p className={styles.description}>
+              Cada assinatura ativa dá direito a 1 veículo. As faturas são geradas sozinhas antes
+              do vencimento; aqui você acompanha, dá baixa e informa o link de pagamento ou o Pix.
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            onClick={() => {
+              setFormError('');
+              setDraft(EMPTY);
+            }}
+          >
+            Novo cliente
+          </Button>
+        </header>
+
+        <div className={billing.tiles}>
+          <div className={billing.tile}>
+            <span className={billing.tileLabel}>Clientes</span>
+            <span className={billing.tileValue}>{customers.data?.length ?? '—'}</span>
+          </div>
+          <div className={billing.tile}>
+            <span className={billing.tileLabel}>A receber</span>
+            <span className={billing.tileValue}>{formatMoney(totals.open)}</span>
+            <span className={billing.tileHint}>faturas em aberto</span>
+          </div>
+          <div className={`${billing.tile} ${totals.overdue > 0 ? billing.tileDanger : ''}`}>
+            <span className={billing.tileLabel}>Em atraso</span>
+            <span className={billing.tileValue}>{totals.overdue}</span>
+            <span className={billing.tileHint}>
+              {totals.suspended} com acesso suspenso
+            </span>
+          </div>
+        </div>
+
+        <Card flush>
+          <div style={{ padding: 'var(--space-3)' }}>
+            <input
+              className={fieldStyles.input}
+              placeholder="Buscar por nome, e-mail, telefone ou documento"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+          {customers.isLoading ? (
+            <Spinner label="Carregando clientes" />
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              icon="👤"
+              title={(customers.data ?? []).length === 0 ? 'Nenhum cliente cadastrado' : 'Nada encontrado'}
+              description={
+                (customers.data ?? []).length === 0
+                  ? 'Cadastre o primeiro cliente para ele acessar o painel e acompanhar os veículos.'
+                  : 'Ajuste a busca para ver outros clientes.'
+              }
+            />
+          ) : (
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th>Contato</th>
+                    <th>Veículos</th>
+                    <th>Em aberto</th>
+                    <th>Situação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((customer) => (
+                    <tr key={customer.id}>
+                      <td>
+                        <Link to={`/clientes/${customer.id}`}>
+                          <strong>{customer.name}</strong>
+                        </Link>
+                        {customer.document && <div className={billing.muted}>{customer.document}</div>}
+                      </td>
+                      <td>
+                        {customer.email}
+                        {customer.phone && <div className={billing.muted}>{customer.phone}</div>}
+                      </td>
+                      <td>{customer.vehicleCount}</td>
+                      <td className={billing.amount}>
+                        {customer.openInvoices > 0 ? formatMoney(customer.openAmountCents) : '—'}
+                      </td>
+                      <td>
+                        <CustomerStatus customer={customer} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <Modal
+        open={draft !== null}
+        wide
+        title="Novo cliente"
+        onClose={() => setDraft(null)}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDraft(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              loading={create.isPending}
+              disabled={!draft?.name.trim() || !draft?.email.trim()}
+              onClick={submit}
+            >
+              Cadastrar
+            </Button>
+          </>
+        }
+      >
+        {draft && (
+          <div className={styles.form}>
+            {formError && <div className={styles.note}>{formError}</div>}
+            <div className={styles.formRow}>
+              <TextField
+                label="Nome"
+                required
+                autoFocus
+                value={draft.name}
+                onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+              />
+              <TextField
+                label="E-mail"
+                type="email"
+                required
+                value={draft.email}
+                onChange={(event) => setDraft({ ...draft, email: event.target.value })}
+              />
+            </div>
+            <div className={styles.formRow}>
+              <TextField
+                label="Telefone"
+                placeholder="(11) 99999-9999"
+                value={draft.phone}
+                onChange={(event) => setDraft({ ...draft, phone: event.target.value })}
+              />
+              <TextField
+                label="CPF ou CNPJ"
+                value={draft.document}
+                onChange={(event) => setDraft({ ...draft, document: event.target.value })}
+              />
+            </div>
+
+            <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+              <legend className={styles.infoLabel}>Acesso ao painel</legend>
+              <label style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                <input
+                  type="radio"
+                  checked={draft.access === 'invite'}
+                  onChange={() => setDraft({ ...draft, access: 'invite' })}
+                />
+                Enviar convite por e-mail para o cliente criar a senha (recomendado)
+              </label>
+              <label style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                <input
+                  type="radio"
+                  checked={draft.access === 'password'}
+                  onChange={() => setDraft({ ...draft, access: 'password' })}
+                />
+                Definir uma senha agora
+              </label>
+            </fieldset>
+            {draft.access === 'password' && (
+              <TextField
+                label="Senha inicial"
+                type="text"
+                autoComplete="off"
+                hint="Mínimo de 10 caracteres."
+                value={draft.password}
+                onChange={(event) => setDraft({ ...draft, password: event.target.value })}
+              />
+            )}
+
+            <p className={billing.muted}>
+              Veículo, rastreador e assinatura vêm depois, na ficha do cliente, em Novo veículo.
+            </p>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}

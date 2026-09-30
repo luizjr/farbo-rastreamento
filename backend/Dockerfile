@@ -1,5 +1,5 @@
 # ---- build ----
-FROM golang:1.24-alpine AS build
+FROM golang:1.27-alpine AS build
 
 WORKDIR /src
 
@@ -19,7 +19,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /out/tksim ./cmd/tksim
 
 # ---- runtime ----
-FROM alpine:3.20
+FROM alpine:3.24
 
 RUN apk add --no-cache ca-certificates tzdata wget \
     && adduser -D -u 10001 tracker

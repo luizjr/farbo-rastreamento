@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
 import { NavLink, Outlet } from 'react-router-dom';
 
+import { meApi } from '@/api/resources';
 import { useRealtime } from '@/hooks/useRealtime';
 import { useAuth } from '@/stores/AuthContext';
 import { useTheme } from '@/hooks/useTheme';
@@ -10,10 +12,20 @@ const ROLE_LABELS: Record<string, string> = {
   admin: 'Administrador',
   operator: 'Operador',
   viewer: 'Visualização',
+  customer: 'Cliente',
 };
 
 export function AppShell() {
-  const { user, logout, canManage } = useAuth();
+  const { user, logout, canManage, canOperate, isCustomer } = useAuth();
+
+  // Para o cliente, a conta alimenta o aviso de fatura vencida no menu.
+  const account = useQuery({
+    queryKey: ['me', 'account'],
+    queryFn: meApi.account,
+    enabled: isCustomer,
+    refetchInterval: 5 * 60_000,
+  });
+  const overdue = account.data?.overdueInvoices ?? 0;
   const { connected } = useRealtime();
   const { theme, toggle } = useTheme();
 
@@ -22,39 +34,74 @@ export function AppShell() {
 
   return (
     <div className={styles.shell}>
-      <header className={styles.header}>
-        <NavLink to="/" className={styles.brand}>
-          <span className={styles.mark} aria-hidden="true">
-            ◉
-          </span>
-          <span className={styles.brandText}>Rastreamento</span>
+      {/* O cabeçalho fica escuro nos dois temas, como a barra da landing: a
+          logo tem letras brancas. */}
+      <header className={styles.header} data-theme="dark">
+        <NavLink to="/dashboard" className={styles.brand}>
+          {/* No celular fica só o símbolo, para sobrar espaço para o menu. */}
+          <picture>
+            <source media="(max-width: 560px)" srcSet="/assets/logo-mark.png" />
+            <img src="/assets/logo-header.png" alt="Farbo Rastreadores" className={styles.logo} />
+          </picture>
         </NavLink>
 
         <nav className={styles.nav}>
-          <NavLink to="/" end className={navClass}>
-            Painel
-          </NavLink>
-          <NavLink to="/eventos" className={navClass}>
-            Eventos
-          </NavLink>
-          <NavLink to="/cercas" className={navClass}>
-            Cercas
-          </NavLink>
-          {canManage && (
+          {isCustomer ? (
             <>
-              <NavLink to="/dispositivos" className={navClass}>
-                Rastreadores
+              <NavLink to="/dashboard" className={navClass}>
+                Mapa
               </NavLink>
-              <NavLink to="/diagnostico" className={navClass}>
-                Diagnóstico
+              <NavLink to="/meus-veiculos" className={navClass}>
+                Meus veículos
               </NavLink>
+              <NavLink to="/faturas" className={navClass}>
+                Faturas
+                {overdue > 0 && (
+                  <span className={styles.navBadge} title={`${overdue} fatura(s) vencida(s)`}>
+                    {overdue}
+                  </span>
+                )}
+              </NavLink>
+            </>
+          ) : (
+            <>
+              <NavLink to="/dashboard" className={navClass}>
+                Painel
+              </NavLink>
+              <NavLink to="/eventos" className={navClass}>
+                Eventos
+              </NavLink>
+              <NavLink to="/cercas" className={navClass}>
+                Cercas
+              </NavLink>
+              {canOperate && (
+                <NavLink to="/pedidos" className={navClass}>
+                  Pedidos
+                </NavLink>
+              )}
+              {canManage && (
+                <>
+                  <NavLink to="/clientes" className={navClass}>
+                    Clientes
+                  </NavLink>
+                  <NavLink to="/prestadores" className={navClass}>
+                    Prestadores
+                  </NavLink>
+                  <NavLink to="/dispositivos" className={navClass}>
+                    Rastreadores
+                  </NavLink>
+                  <NavLink to="/diagnostico" className={navClass}>
+                    Diagnóstico
+                  </NavLink>
+                </>
+              )}
             </>
           )}
         </nav>
 
         <div className={styles.right}>
           <div
-            className={styles.connection}
+            className={`${styles.connection} ${connected ? styles.connectionLive : ''}`}
             title={
               connected
                 ? 'Recebendo atualizações em tempo real'

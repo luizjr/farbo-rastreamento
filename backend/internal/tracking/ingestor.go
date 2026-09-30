@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -12,17 +13,17 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/farbo/tracker-platform/backend/internal/commands"
-	"github.com/farbo/tracker-platform/backend/internal/config"
-	"github.com/farbo/tracker-platform/backend/internal/database"
-	"github.com/farbo/tracker-platform/backend/internal/devices"
-	"github.com/farbo/tracker-platform/backend/internal/events"
-	"github.com/farbo/tracker-platform/backend/internal/geofences"
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
-	"github.com/farbo/tracker-platform/backend/internal/tcp"
-	"github.com/farbo/tracker-platform/backend/internal/telemetry"
-	"github.com/farbo/tracker-platform/backend/internal/vehicles"
-	"github.com/farbo/tracker-platform/backend/internal/websocket"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/commands"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/config"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/devices"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/events"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/geofences"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/tcp"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/telemetry"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/vehicles"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/websocket"
 )
 
 // touchInterval evita um UPDATE em devices a cada pacote: o último contato só
@@ -283,7 +284,6 @@ func (i *Ingestor) buildPosition(dev *devices.Device, msg protocols.TrackerMessa
 			"imei", telemetry.IMEI(dev.IMEI), "protocol", msg.Protocol)
 	}
 
-	heading := msg.Heading
 	gpsValid := msg.GPSValid
 
 	return &Position{
@@ -292,7 +292,7 @@ func (i *Ingestor) buildPosition(dev *devices.Device, msg protocols.TrackerMessa
 		Latitude:     msg.Latitude,
 		Longitude:    msg.Longitude,
 		SpeedKmh:     msg.SpeedKmh,
-		Heading:      &heading,
+		Heading:      validHeading(msg.Heading),
 		Altitude:     msg.Altitude,
 		GPSValid:     &gpsValid,
 		Satellites:   msg.Satellites,
@@ -306,8 +306,17 @@ func (i *Ingestor) buildPosition(dev *devices.Device, msg protocols.TrackerMessa
 
 		Protocol:   msg.Protocol,
 		Source:     SourceGPS,
-		RawPayload: msg.RawPayload,
+		RawPayload: i.rawPayload(msg),
 	}
+}
+
+// rawPayload só vai para a posição com POSITIONS_STORE_RAW ligado: é ~25%
+// do disco de cada posição e só serve para investigar um modelo novo.
+func (i *Ingestor) rawPayload(msg protocols.TrackerMessage) string {
+	if !i.cfg.StoreRawPayload {
+		return ""
+	}
+	return msg.RawPayload
 }
 
 // emitStateEvents compara o estado anterior com o novo e registra transições.
@@ -642,6 +651,15 @@ func (i *Ingestor) touch(ctx context.Context, dev *devices.Device) {
 		i.publisher.PublishFor(websocket.TypeDeviceOnline, i.vehicleIDFor(ctx, dev.ID), &dev.ID,
 			map[string]any{"deviceId": dev.ID, "status": devices.StatusOnline})
 	}
+}
+
+// validHeading descarta rumo impossível (o GT06 reserva 10 bits, até 1023):
+// melhor mostrar o veículo sem rumo do que girado para um ângulo inventado.
+func validHeading(h float64) *float64 {
+	if math.IsNaN(h) || h < 0 || h > 360 {
+		return nil
+	}
+	return &h
 }
 
 func changedBool(before, after *bool) bool {

@@ -1,0 +1,190 @@
+.installationSection {
+  padding: 2rem 1.5rem 4rem 1.5rem;
+  background: #060907;
+}
+
+.container {
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.outerCard {
+  background: #0d130e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  padding: 2.25rem 2.5rem;
+}
+
+.sectionTitle {
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: 2.5px;
+  color: #ffffff;
+  margin-bottom: 1.75rem;
+  text-transform: uppercase;
+}
+
+.contentGrid {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 2.5rem;
+  align-items: center;
+}
+
+.optionsColumn {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+.optionBox {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: #141c15;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 1.5rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.optionBox:hover {
+  border-color: var(--color-neon-green);
+  background: #19241a;
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px rgba(59, 229, 88, 0.2);
+}
+
+.optionIcon {
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.optionDetails {
+  display: flex;
+  flex-direction: column;
+}
+
+.vehicleType {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.optionPrice {
+  font-size: 0.9375rem;
+  color: var(--color-neon-green);
+  line-height: 1.2;
+  margin: 0.2rem 0;
+}
+
+.optionPrice strong {
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.tagline {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.imagesColumn {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.imageCard {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  aspect-ratio: 4 / 3;
+  background: #000;
+}
+
+.imageCard img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.imageCard:hover img {
+  transform: scale(1.08);
+}
+
+@media (max-width: 900px) {
+  .contentGrid {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .outerCard {
+    padding: 1.5rem;
+  }
+  .optionsColumn {
+    grid-template-columns: 1fr;
+  }
+  .imagesColumn {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+}
+
+/* Aviso de que a instalação é paga ao prestador, com o botão da lista. */
+.installersNote {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1rem 1.25rem;
+  background: rgba(59, 229, 88, 0.06);
+  border: 1px dashed rgba(59, 229, 88, 0.35);
+  border-radius: 16px;
+}
+
+.installersNote p {
+  flex: 1;
+  min-width: 220px;
+  color: #cbd5e1;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.installersNote strong {
+  color: #ffffff;
+}
+
+.installersBtn {
+  background: var(--color-neon-green);
+  color: #060907;
+  border: none;
+  border-radius: 999px;
+  padding: 0.7rem 1.3rem;
+  font-size: 0.875rem;
+  font-weight: 800;
+  box-shadow: 0 0 15px rgba(59, 229, 88, 0.35);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.installersBtn:hover {
+  background: var(--color-neon-green-hover);
+  transform: translateY(-1px);
+}

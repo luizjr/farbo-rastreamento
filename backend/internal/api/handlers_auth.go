@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
-	"github.com/farbo/tracker-platform/backend/internal/audit"
-	"github.com/farbo/tracker-platform/backend/internal/auth"
-	"github.com/farbo/tracker-platform/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/audit"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/auth"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
 )
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -101,6 +102,112 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.Auth.Logout(r.Context(), req.RefreshToken); err != nil {
 		handleStoreError(w, err, "token não encontrado")
+		return
+	}
+	writeJSON(w, http.StatusNoContent, nil)
+}
+
+type forgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+// forgotPasswordMessage é a resposta para qualquer e-mail, com ou sem conta:
+// quem pergunta não descobre quais endereços estão cadastrados.
+const forgotPasswordMessage = "Se houver uma conta com esse e-mail, enviaremos um link para redefinir a senha."
+
+func (s *Server) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req forgotPasswordRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "corpo inválido")
+		return
+	}
+	email := strings.TrimSpace(req.Email)
+	if !strings.Contains(email, "@") || len(email) > 254 {
+		writeError(w, http.StatusBadRequest, "informe um e-mail válido")
+		return
+	}
+
+	user, outcome, err := s.Auth.RequestPasswordReset(r.Context(), email)
+	if err != nil {
+		s.Log.Error("falha ao processar pedido de redefinição de senha", "err", err)
+		writeError(w, http.StatusInternalServerError,
+			"não foi possível processar o pedido agora; tente novamente em instantes")
+		return
+	}
+
+	entry := &audit.Entry{
+		Action: audit.ActionPasswordResetRequested, Result: string(outcome), IPAddress: clientIP(r),
+	}
+	if user != nil {
+		entry.UserID = &user.ID
+	} else {
+		entry.Metadata = map[string]any{"email": email}
+	}
+	s.Audit.Record(r.Context(), entry)
+
+	writeJSON(w, http.StatusAccepted, map[string]string{"message": forgotPasswordMessage})
+}
+
+type resetPasswordRequest struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
+// invalidResetLinkMessage acompanha o 410: o link não serve mais, e a tela
+// oferece pedir outro. Senha fraca volta como 400, para a tela distinguir.
+const invalidResetLinkMessage = "este link de redefinição é inválido ou expirou; peça um novo"
+
+func (s *Server) handleResetPassword(w http.ResponseWriter, r *http.Request) {
+	var req resetPasswordRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "corpo inválido")
+		return
+	}
+
+	user, err := s.Auth.ResetPassword(r.Context(), req.Token, req.Password)
+	if err != nil {
+		var weak *auth.PasswordError
+		switch {
+		case errors.As(err, &weak):
+			writeError(w, http.StatusBadRequest, weak.Reason)
+		case errors.Is(err, auth.ErrInvalidResetToken):
+			s.Audit.Record(r.Context(), &audit.Entry{
+				Action: audit.ActionPasswordResetFailed, Result: "INVALID_TOKEN", IPAddress: clientIP(r),
+			})
+			writeError(w, http.StatusGone, invalidResetLinkMessage)
+		default:
+			s.Log.Error("falha ao redefinir senha", "err", err)
+			writeError(w, http.StatusInternalServerError, "erro interno")
+		}
+		return
+	}
+
+	s.Audit.Record(r.Context(), &audit.Entry{
+		UserID: &user.ID, Action: audit.ActionPasswordReset, Result: "OK", IPAddress: clientIP(r),
+	})
+	writeJSON(w, http.StatusNoContent, nil)
+}
+
+type resetTokenRequest struct {
+	Token string `json:"token"`
+}
+
+// handleCheckResetToken deixa a tela avisar que o link expirou antes de a
+// pessoa digitar a senha nova. Não consome o token.
+func (s *Server) handleCheckResetToken(w http.ResponseWriter, r *http.Request) {
+	var req resetTokenRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "corpo inválido")
+		return
+	}
+
+	if err := s.Auth.CheckResetToken(r.Context(), req.Token); err != nil {
+		if errors.Is(err, auth.ErrInvalidResetToken) {
+			writeError(w, http.StatusGone, invalidResetLinkMessage)
+			return
+		}
+		s.Log.Error("falha ao validar link de redefinição", "err", err)
+		writeError(w, http.StatusInternalServerError, "erro interno")
 		return
 	}
 	writeJSON(w, http.StatusNoContent, nil)

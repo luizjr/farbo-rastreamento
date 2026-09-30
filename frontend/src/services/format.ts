@@ -1,5 +1,7 @@
 /** Formatação de valores exibidos no painel. */
 
+import type { DeliveryAddress } from '@/types';
+
 const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
   day: '2-digit',
   month: '2-digit',
@@ -188,4 +190,67 @@ export function hoursAgo(hours: number): string {
 
 export function nowISO(): string {
   return new Date().toISOString();
+}
+
+const moneyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+/** Centavos → "R$ 69,90". */
+export function formatMoney(cents: number | null | undefined): string {
+  if (cents === null || cents === undefined) return '—';
+  return moneyFormatter.format(cents / 100);
+}
+
+/**
+ * "69,90", "69.90", "R$ 1.234,56" → centavos. Devolve null se não for um
+ * valor válido.
+ */
+export function parseMoney(text: string): number | null {
+  let clean = text.replace(/[R$\s]/g, '');
+  if (!clean) return null;
+  // Com vírgula, o ponto é separador de milhar (padrão brasileiro).
+  if (clean.includes(',')) clean = clean.replace(/\./g, '').replace(',', '.');
+  if (!/^\d+(\.\d{1,2})?$/.test(clean)) return null;
+  return Math.round(Number(clean) * 100);
+}
+
+/** Centavos → "69,90", para preencher um campo de valor. */
+export function centsToInput(cents: number): string {
+  return (cents / 100).toFixed(2).replace('.', ',');
+}
+
+/**
+ * Data de calendário "2026-10-05" → "05/10/2026". Não passa por Date: meia
+ * noite UTC viraria o dia anterior no horário de Brasília.
+ */
+export function formatDateOnly(value: string | null | undefined): string {
+  if (!value) return '—';
+  const [year, month, day] = value.split('-');
+  return day && month && year ? `${day}/${month}/${year}` : value;
+}
+
+/** "01310100" → "01310-100" (também serve de máscara enquanto digita). */
+export function formatZipCode(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  return digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
+}
+
+/**
+ * Endereço de entrega em duas linhas: "Av. Paulista, 1000 - apto 12" e
+ * "Bela Vista, São Paulo/SP · CEP 01310-100".
+ */
+export function formatAddressLines(a: DeliveryAddress): [string, string] {
+  const first = `${a.street}, ${a.number}${a.complement ? ` - ${a.complement}` : ''}`;
+  const second = `${a.district}, ${a.city}/${a.state} · CEP ${formatZipCode(a.zipCode)}`;
+  return [first, second];
+}
+
+export function formatAddress(a: DeliveryAddress): string {
+  return formatAddressLines(a).join(' · ');
+}
+
+/** Hoje no formato AAAA-MM-DD, no fuso do navegador. */
+export function todayISO(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }

@@ -14,8 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/farbo/tracker-platform/backend/internal/config"
-	"github.com/farbo/tracker-platform/backend/migrations"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/config"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/migrations"
 )
 
 var (
@@ -32,11 +32,31 @@ type DB struct {
 }
 
 func Connect(ctx context.Context, cfg config.Postgres) (*DB, error) {
+	return connect(ctx, cfg, cfg.MaxConns, nil)
+}
+
+// ConnectTelemetry abre o pool das gravações dos rastreadores. Sem
+// TelemetrySyncCommit, o commit não espera o fsync (synchronous_commit=off
+// só nestas conexões): 500 posições por segundo deixam de depender da
+// latência do disco. Numa queda do PostgreSQL perde-se, no máximo, uma
+// fração de segundo de posições — nunca dado corrompido.
+func ConnectTelemetry(ctx context.Context, cfg config.Postgres) (*DB, error) {
+	var params map[string]string
+	if !cfg.TelemetrySyncCommit {
+		params = map[string]string{"synchronous_commit": "off"}
+	}
+	return connect(ctx, cfg, cfg.TelemetryMaxConns, params)
+}
+
+func connect(ctx context.Context, cfg config.Postgres, maxConns int32, params map[string]string) (*DB, error) {
 	poolCfg, err := pgxpool.ParseConfig(cfg.DSN())
 	if err != nil {
 		return nil, fmt.Errorf("dsn inválido: %w", err)
 	}
-	poolCfg.MaxConns = cfg.MaxConns
+	for k, v := range params {
+		poolCfg.ConnConfig.RuntimeParams[k] = v
+	}
+	poolCfg.MaxConns = maxConns
 	poolCfg.MaxConnLifetime = time.Hour
 	poolCfg.MaxConnIdleTime = 30 * time.Minute
 
@@ -139,6 +159,15 @@ func MapError(err error) error {
 		}
 	}
 	return err
+}
+
+// Querier é o que o pool e uma transação têm em comum. Repositórios que
+// aceitam um Querier conseguem escrever dentro de uma transação aberta por
+// outro serviço (ex.: contratar um rastreador cria assinatura, veículo e
+// fatura de uma vez).
+type Querier interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 // Scanner abstrai pgx.Row e pgx.Rows para reaproveitar funções de scan.

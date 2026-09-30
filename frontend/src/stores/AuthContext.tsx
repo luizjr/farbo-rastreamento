@@ -12,6 +12,12 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   canSendCommands: boolean;
   canManage: boolean;
+  /** Equipe que opera os pedidos (admin e operador). */
+  canOperate: boolean;
+  /** Cliente final: vê só os próprios veículos e faturas. */
+  isCustomer: boolean;
+  /** Equipe da central (admin, operador, visualização). */
+  isStaff: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -73,8 +79,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       login,
       logout,
-      canSendCommands: user?.role === 'admin' || user?.role === 'operator',
+      // O cliente também comanda (bloqueio, desbloqueio, posição), mas só os
+      // próprios veículos — a API confere o dono.
+      canSendCommands:
+        user?.role === 'admin' || user?.role === 'operator' || user?.role === 'customer',
       canManage: user?.role === 'admin',
+      canOperate: user?.role === 'admin' || user?.role === 'operator',
+      isCustomer: user?.role === 'customer',
+      isStaff: user !== null && user.role !== 'customer',
     }),
     [user, loading, login, logout],
   );

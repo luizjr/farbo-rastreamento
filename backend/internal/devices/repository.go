@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/farbo/tracker-platform/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
 )
 
 const columns = `id, imei, COALESCE(model, ''), COALESCE(manufacturer, ''), COALESCE(protocol, ''),
@@ -17,10 +17,15 @@ const columns = `id, imei, COALESCE(model, ''), COALESCE(manufacturer, ''), COAL
 	COALESCE(command_password, ''), command_overrides, COALESCE(notes, ''), created_at, updated_at`
 
 type Repository struct {
-	db *database.DB
+	db      *database.DB
+	touchDB *database.DB
 }
 
-func NewRepository(db *database.DB) *Repository { return &Repository{db: db} }
+func NewRepository(db *database.DB) *Repository { return &Repository{db: db, touchDB: db} }
+
+// UseTelemetry manda o "último contato" (uma gravação a cada ~15 s por
+// rastreador) para o pool das gravações dos rastreadores.
+func (r *Repository) UseTelemetry(db *database.DB) { r.touchDB = db }
 
 func scan(row database.Scanner) (*Device, error) {
 	var d Device
@@ -121,7 +126,7 @@ func (r *Repository) List(ctx context.Context) ([]*Device, error) {
 // last_seen_at usa GREATEST para não retroceder quando o aparelho descarrega
 // posições antigas guardadas offline (§35).
 func (r *Repository) Touch(ctx context.Context, id uuid.UUID, seenAt time.Time) error {
-	_, err := r.db.Exec(ctx, `
+	_, err := r.touchDB.Exec(ctx, `
 		UPDATE devices
 		SET last_seen_at = GREATEST(COALESCE(last_seen_at, $2), $2),
 		    status = 'ONLINE', updated_at = NOW()

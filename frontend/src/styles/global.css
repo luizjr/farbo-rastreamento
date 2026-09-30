@@ -91,6 +91,14 @@ a:hover {
   background: var(--surface-sunken);
 }
 
+/* No tema escuro, os tiles do OpenStreetMap são invertidos para o mapa não
+   virar um bloco branco no meio do painel. Só a camada de tiles recebe o
+   filtro: marcadores, trajetos e cercas mantêm as cores originais. */
+:root:not([data-theme='light']) .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) grayscale(1) brightness(0.8) contrast(1.1) sepia(0.25)
+    hue-rotate(70deg);
+}
+
 .leaflet-popup-content-wrapper,
 .leaflet-popup-tip {
   background: var(--surface-overlay);
@@ -111,7 +119,7 @@ a:hover {
 }
 
 .leaflet-control-attribution {
-  background: rgba(11, 16, 23, 0.7) !important;
+  background: rgba(6, 9, 7, 0.7) !important;
   color: var(--text-muted) !important;
   font-size: 10px;
 }

@@ -1,16 +1,23 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 
+import { AuthLayout, authStyles as styles } from '@/components/layout/AuthLayout';
 import { Button } from '@/components/ui/Button';
 import { TextField } from '@/components/ui/Field';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/stores/AuthContext';
 
-import styles from './LoginPage.module.css';
+/** Estado de navegação que a tela de redefinição deixa ao mandar para cá. */
+export interface LoginLocationState {
+  passwordReset?: boolean;
+}
 
 export function LoginPage() {
   const { user, loading, login } = useAuth();
+  const location = useLocation();
+  const passwordReset = (location.state as LoginLocationState | null)?.passwordReset === true;
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,7 +27,7 @@ export function LoginPage() {
     return <Spinner label="Verificando sessão" />;
   }
   if (user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   const onSubmit = async (event: FormEvent) => {
@@ -37,44 +44,45 @@ export function LoginPage() {
   };
 
   return (
-    <div className={styles.page}>
-      <div className={styles.card}>
-        <div className={styles.brand}>
-          <span className={styles.mark} aria-hidden="true">
-            ◉
-          </span>
-          <div>
-            <h1 className={styles.title}>Rastreamento</h1>
-            <span className={styles.subtitle}>Acesso ao painel</span>
+    <AuthLayout
+      tag="Área do cliente"
+      title="Acesse seu painel"
+      subtitle="Acompanhe seus veículos em tempo real."
+    >
+      <form className={styles.form} onSubmit={onSubmit}>
+        {passwordReset && !error && (
+          <div className={styles.notice} role="status">
+            Senha alterada. Entre com a nova senha.
           </div>
-        </div>
+        )}
+        {error && <div className={styles.error}>{error}</div>}
 
-        <form className={styles.form} onSubmit={onSubmit}>
-          {error && <div className={styles.error}>{error}</div>}
+        <TextField
+          label="E-mail"
+          type="email"
+          autoComplete="username"
+          required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
 
-          <TextField
-            label="E-mail"
-            type="email"
-            autoComplete="username"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
+        <TextField
+          label="Senha"
+          type="password"
+          autoComplete="current-password"
+          required
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
 
-          <TextField
-            label="Senha"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
+        <Link to="/esqueci-senha" className={styles.inlineLink}>
+          Esqueci minha senha
+        </Link>
 
-          <Button type="submit" variant="primary" size="large" block loading={submitting}>
-            Entrar
-          </Button>
-        </form>
-      </div>
-    </div>
+        <Button type="submit" variant="primary" size="large" block loading={submitting}>
+          Entrar
+        </Button>
+      </form>
+    </AuthLayout>
   );
 }

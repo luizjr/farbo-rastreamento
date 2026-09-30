@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/farbo/tracker-platform/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
 )
 
 // Tipos de evento (§11).
@@ -164,8 +164,10 @@ func (r *Repository) ListRecent(ctx context.Context, limit int) ([]*Event, error
 }
 
 // Publisher entrega o evento ao WebSocket. Implementado por websocket.Hub.
+// O rastreador vai no envelope para o hub entregar o evento só a quem pode
+// vê-lo.
 type Publisher interface {
-	Publish(eventType string, payload any)
+	PublishFor(eventType string, vehicleID, deviceID *uuid.UUID, data any)
 }
 
 type Service struct {
@@ -188,7 +190,7 @@ func (s *Service) Record(ctx context.Context, e *Event) {
 		return
 	}
 	if s.publisher != nil {
-		s.publisher.Publish("vehicle.event", e)
+		s.publisher.PublishFor("vehicle.event", nil, &e.DeviceID, e)
 	}
 }
 

@@ -6,8 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/farbo/tracker-platform/backend/internal/commands"
-	"github.com/farbo/tracker-platform/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/commands"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
 )
 
 // SnapshotProvider entrega ao módulo de comandos o dado em que a regra de

@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
 )
 
 // ErrNotConnected indica que o dispositivo não tem sessão aberta no momento.

@@ -4,7 +4,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,7 +14,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"golang.org/x/time/rate"
 
-	"github.com/farbo/tracker-platform/backend/internal/telemetry"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/telemetry"
 )
 
 // metricsMiddleware alimenta os contadores HTTP do Prometheus.
@@ -127,23 +129,49 @@ func (rl *rateLimiter) middleware(next http.Handler) http.Handler {
 	})
 }
 
-// clientIP extrai o IP de origem, considerando proxy reverso.
-func clientIP(r *http.Request) string {
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		// O primeiro endereço da lista é o cliente original.
-		for i := range len(forwarded) {
-			if forwarded[i] == ',' {
-				return trimSpace(forwarded[:i])
-			}
+// trustedProxies são as redes de quem o X-Forwarded-For é aceito
+// (HTTP.TrustedProxies / TRUSTED_PROXIES); definido na montagem do servidor.
+var trustedProxies []netip.Prefix
+
+func isTrustedProxy(ip netip.Addr) bool {
+	ip = ip.Unmap()
+	for _, prefix := range trustedProxies {
+		if prefix.Contains(ip) {
+			return true
 		}
-		return trimSpace(forwarded)
 	}
-	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-		return trimSpace(realIP)
-	}
+	return false
+}
+
+// clientIP é o IP de origem. Os cabeçalhos de proxy (X-Forwarded-For,
+// X-Real-IP) só valem quando a conexão vem de um proxy confiável; aí o
+// X-Forwarded-For é lido da direita para a esquerda, pulando os proxies —
+// o primeiro endereço que sobra é o cliente (o que ele mesmo escreveu à
+// esquerda é ignorado).
+func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
+	}
+	peer, err := netip.ParseAddr(host)
+	if err != nil || !isTrustedProxy(peer) {
+		return host
+	}
+	if forwarded := r.Header.Values("X-Forwarded-For"); len(forwarded) > 0 {
+		hops := strings.Split(strings.Join(forwarded, ","), ",")
+		for i := len(hops) - 1; i >= 0; i-- {
+			hop, err := netip.ParseAddr(trimSpace(hops[i]))
+			if err != nil {
+				// Lixo no cabeçalho: não dá para confiar no que vem antes.
+				break
+			}
+			if !isTrustedProxy(hop) {
+				return hop.Unmap().String()
+			}
+		}
+	}
+	if realIP, err := netip.ParseAddr(trimSpace(r.Header.Get("X-Real-IP"))); err == nil {
+		return realIP.Unmap().String()
 	}
 	return host
 }

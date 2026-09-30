@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 
 import { geofencesApi } from '@/api/resources';
 import { Address } from '@/components/ui/Address';
+import { SuspendedNotice, isSuspendedError } from '@/components/billing/SuspendedNotice';
 import { TrackerMap } from '@/components/map/TrackerMap';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
@@ -38,6 +39,7 @@ export function DashboardPage() {
     return <Spinner label="Carregando veículos" />;
   }
   if (error) {
+    if (isSuspendedError(error)) return <SuspendedNotice message={error.message} />;
     return <Spinner label="Falha ao carregar. Tentando novamente…" />;
   }
 

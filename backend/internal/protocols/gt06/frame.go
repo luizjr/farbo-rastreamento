@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
 )
 
 // Delimitadores do GT06. DOCUMENTED: especificação pública GT06/Concox.

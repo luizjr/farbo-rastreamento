@@ -29,7 +29,11 @@ func (p *Principal) Is(roles ...string) bool {
 	return false
 }
 
-// CanSendCommands: quem só visualiza não aciona o veículo.
+// IsCustomer: cliente final, restrito aos próprios veículos e faturas.
+func (p *Principal) IsCustomer() bool { return p.Is(RoleCustomer) }
+
+// CanSendCommands: quem só visualiza não aciona o veículo. Vale para a
+// equipe; o cliente tem rotas próprias, limitadas aos veículos dele.
 func (p *Principal) CanSendCommands() bool { return p.Is(RoleAdmin, RoleOperator) }
 
 // CanManage: alterações de cadastro são de administrador.
@@ -98,7 +102,13 @@ func bearerToken(r *http.Request) string {
 	if after, found := strings.CutPrefix(header, "Bearer "); found {
 		return strings.TrimSpace(after)
 	}
-	return strings.TrimSpace(r.URL.Query().Get("token"))
+	// O navegador não deixa pôr cabeçalho no WebSocket: só ali o token vem na
+	// URL. Nas demais rotas ele não vale — token em URL acaba em log de proxy
+	// e no Referer de quem recebe o link.
+	if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+		return strings.TrimSpace(r.URL.Query().Get("token"))
+	}
+	return ""
 }
 
 func writeUnauthorized(w http.ResponseWriter, message string) {

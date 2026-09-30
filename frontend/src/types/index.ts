@@ -27,13 +27,16 @@ export type CommandType =
   | 'REBOOT'
   | 'CUSTOM';
 
-export type UserRole = 'admin' | 'operator' | 'viewer';
+/** admin, operator e viewer são a equipe da central; customer é o cliente final. */
+export type UserRole = 'admin' | 'operator' | 'viewer' | 'customer';
 
 export interface User {
   id: string;
   email: string;
   name: string;
   role: UserRole;
+  phone: string;
+  document: string;
   active: boolean;
   createdAt: string;
 }
@@ -118,9 +121,17 @@ export interface Vehicle {
   color: string;
   speedLimitKmh: number | null;
   deviceId: string | null;
+  /** Cliente dono do veículo; nulo é veículo da central. */
+  ownerId: string | null;
+  /** Exceção do veículo (7, 14 ou 30 dias); nulo segue o cliente. */
+  historyRetentionDays: HistoryRetention | null;
   createdAt: string;
   updatedAt: string;
 }
+
+/** Por quantos dias o histórico (trajeto e eventos) é guardado. */
+export type HistoryRetention = 7 | 14 | 30;
+export const HISTORY_RETENTION_OPTIONS: HistoryRetention[] = [7, 14, 30];
 
 /** O que a lista do painel consome: veículo com o estado do rastreador junto. */
 export interface VehicleView extends Vehicle {
@@ -128,6 +139,8 @@ export interface VehicleView extends Vehicle {
   lastPosition: Position | null;
   state: DeviceState | null;
   connected: boolean;
+  /** Prazo que vale para o veículo (dele, do cliente ou o padrão da central). */
+  historyDays: number;
 }
 
 export interface VehicleEvent {
@@ -253,4 +266,270 @@ export interface RealtimeMessage<T = unknown> {
   deviceId?: string;
   timestamp: string;
   data?: T;
+}
+
+// ---------------------------------------------------------------------------
+// Assinaturas e faturas
+// ---------------------------------------------------------------------------
+
+/** Data de calendário no formato AAAA-MM-DD (sem hora nem fuso). */
+export type DateOnly = string;
+
+/** Endereço de entrega do cliente: para onde vai o rastreador contratado. */
+export interface DeliveryAddress {
+  /** CEP só com os 8 dígitos. */
+  zipCode: string;
+  street: string;
+  number: string;
+  complement: string;
+  district: string;
+  city: string;
+  /** Sigla da UF, ex.: "SP". */
+  state: string;
+}
+
+export interface Subscription {
+  id: string;
+  customerId: string;
+  planName: string;
+  priceCents: number;
+  dueDay: number;
+  nextDueDate: DateOnly;
+  status: 'ACTIVE' | 'CANCELED';
+  canceledAt: string | null;
+  /** Veículo que a assinatura cobre; nulo só em dados de antes do fluxo único. */
+  vehicleId: string | null;
+  /** Cópia do endereço de entrega na contratação; nula se não houve envio. */
+  deliveryAddress: DeliveryAddress | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Invoice {
+  id: string;
+  customerId: string;
+  subscriptionId: string | null;
+  description: string;
+  amountCents: number;
+  dueDate: DateOnly;
+  status: 'OPEN' | 'PAID' | 'CANCELED';
+  /** Em aberto com vencimento no passado (calculado pelo backend). */
+  overdue: boolean;
+  daysOverdue: number;
+  paidAt: string | null;
+  /** Como foi quitada: MANUAL (baixa da central) ou PIX (confirmado no provedor). */
+  paidVia: '' | 'MANUAL' | 'PIX';
+  /** Pix que quitou a fatura, quando paidVia = PIX. */
+  paidChargeId: string | null;
+  paymentUrl: string;
+  pixCode: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Pix gerado para pagar uma fatura (AbacatePay, checkout transparente). */
+export interface PixCharge {
+  id: string;
+  invoiceId: string;
+  provider: string;
+  providerChargeId: string;
+  amountCents: number;
+  /** Status do provedor: PENDING, PAID, EXPIRED, CANCELLED, REFUNDED, UNDER_DISPUTE… */
+  status: string;
+  /** Pix copia-e-cola. */
+  brCode: string;
+  /** Imagem do QR Code (data:image/png;base64,…). */
+  qrCodeImage: string;
+  /** Cobrança do ambiente de testes: dá para simular o pagamento. */
+  devMode: boolean;
+  expiresAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  invoiceStatus?: Invoice['status'];
+  /** Estorno pedido pela central (em produção conclui depois, assíncrono). */
+  refundRequestedAt: string | null;
+  refundId: string;
+  refundReason: string;
+}
+
+/** Pix que movimentou dinheiro (pago, estornado, em disputa), na ficha do cliente. */
+export interface PixPayment extends PixCharge {
+  invoiceDescription: string;
+  /** Foi este Pix que quitou a fatura? Estorná-lo reabre a fatura. */
+  settledInvoice: boolean;
+}
+
+/** Linha da lista de clientes da central. */
+export interface CustomerSummary {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  document: string;
+  active: boolean;
+  createdAt: string;
+  activeSubscriptions: number;
+  vehicleCount: number;
+  openInvoices: number;
+  overdueInvoices: number;
+  openAmountCents: number;
+  suspended: boolean;
+}
+
+export type ChipStatus = 'REQUESTED' | 'SHIPPED' | 'AT_BASE' | 'SEPARATED';
+export type TrackerStatus =
+  | 'AWAITING_SUPPLIER'
+  | 'AT_BASE'
+  | 'AWAITING_CHIP'
+  | 'CONFIGURING'
+  | 'CONFIGURED'
+  | 'SHIPPED'
+  | 'IN_TRANSIT'
+  | 'DELIVERED';
+export type FulfillmentTrack = 'CHIP' | 'TRACKER';
+
+export interface FulfillmentEvent {
+  id: number;
+  track: FulfillmentTrack;
+  status: string;
+  note: string;
+  /** Mudou sozinho (rastreio do Melhor Envios). */
+  automatic: boolean;
+  createdAt: string;
+}
+
+/** Acompanhamento de um veículo: o chip M2M e o rastreador até o cliente. */
+export interface Fulfillment {
+  id: string;
+  customerId: string;
+  customerName: string;
+  vehicleId: string;
+  vehicleName: string;
+  vehiclePlate: string;
+  subscriptionId: string | null;
+  chipStatus: ChipStatus;
+  trackerStatus: TrackerStatus;
+  shippingOrderId: string | null;
+  shippingProtocol: string;
+  shippingService: string;
+  shippingPriceCents: number | null;
+  /** Status bruto do Melhor Envios (posted, delivered, undelivered...). */
+  shippingStatus: string;
+  trackingCode: string;
+  labelUrl: string;
+  events: FulfillmentEvent[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** O que o cliente vê do acompanhamento. */
+export interface CustomerFulfillment {
+  id: string;
+  vehicleId: string;
+  vehicleName: string;
+  chipStatus: ChipStatus;
+  trackerStatus: TrackerStatus;
+  carrier: string;
+  trackingCode: string;
+  events: FulfillmentEvent[];
+  createdAt: string;
+}
+
+export interface ShippingQuote {
+  serviceId: number;
+  service: string;
+  company: string;
+  priceCents: number;
+  deliveryDays: number;
+  /** Preenchido quando o serviço não atende o trecho. */
+  error: string;
+}
+
+export interface ShippingIntegration {
+  configured: boolean;
+  canConnect: boolean;
+  staticToken: boolean;
+  connected: boolean;
+  sandbox: boolean;
+  expiresAt: string | null;
+  accountName: string;
+  accountEmail: string;
+  accountError: string;
+  missingOrigin: string[];
+  redirectUrl: string;
+}
+
+export interface CustomerDetail extends CustomerSummary {
+  subscriptions: Subscription[];
+  invoices: Invoice[];
+  vehicles: VehicleView[];
+  /** Pix online (AbacatePay) configurado no servidor. */
+  onlinePayment: boolean;
+  payments: PixPayment[];
+  deliveryAddress: DeliveryAddress | null;
+  fulfillments: Fulfillment[];
+  /** Prazo do histórico no cliente; nulo = padrão da central. */
+  historyRetentionDays: HistoryRetention | null;
+  defaultHistoryDays: number;
+}
+
+/**
+ * Preços de um rastreador novo (para o cliente, o plano é o que ele pagaria).
+ * A instalação não entra: é paga direto ao prestador.
+ */
+export interface Catalog {
+  planName: string;
+  planPriceCents: number;
+  defaultDueDay: number;
+  equipmentName: string;
+  equipmentPriceCents: number;
+  /** Prazo, em dias, da fatura do equipamento. */
+  setupDueDays: number;
+}
+
+/** Prestador de instalação recomendado (a instalação é paga direto a ele). */
+export interface PublicInstaller {
+  id: string;
+  name: string;
+  city: string;
+  serviceArea: string;
+  /** Só dígitos, já com o 55 (para o link wa.me). */
+  whatsapp: string;
+  servesMoto: boolean;
+  servesCar: boolean;
+  priceMotoCents: number | null;
+  priceCarCents: number | null;
+  description: string;
+}
+
+/** Cadastro completo, visto pela central. */
+export interface Installer extends PublicInstaller {
+  /** Inativo não aparece na landing nem no painel do cliente. */
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** O que a contratação de um rastreador criou. */
+export interface TrackerOrderResult {
+  vehicle: Vehicle;
+  subscription: Subscription;
+  /** Fatura do equipamento; nula quando nada foi cobrado. */
+  setupInvoice: Invoice | null;
+}
+
+/** Resumo da conta que o cliente vê. */
+export interface CustomerAccount {
+  activeSubscriptions: number;
+  vehicles: number;
+  openInvoices: number;
+  overdueInvoices: number;
+  openAmountCents: number;
+  suspended: boolean;
+  suspendAfterDays: number;
+  nextInvoice: Invoice | null;
+  /** Pix online (AbacatePay) configurado no servidor. */
+  onlinePayment: boolean;
+  /** Nulo até o cliente cadastrar; sem ele, não dá para contratar rastreador. */
+  deliveryAddress: DeliveryAddress | null;
 }

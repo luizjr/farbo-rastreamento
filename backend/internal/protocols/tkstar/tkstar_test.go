@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
 )
 
 // ATENÇÃO: as linhas usadas aqui seguem a gramática ASSUMED descrita no topo

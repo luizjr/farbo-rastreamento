@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/farbo/tracker-platform/backend/internal/auth"
-	"github.com/farbo/tracker-platform/backend/internal/commands"
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/auth"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/commands"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
 )
 
 func (s *Server) handleEngineCut(w http.ResponseWriter, r *http.Request) {

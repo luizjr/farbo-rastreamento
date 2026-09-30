@@ -16,8 +16,8 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/farbo/tracker-platform/backend/internal/config"
-	"github.com/farbo/tracker-platform/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/config"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
 )
 
 var (
@@ -47,16 +47,48 @@ type Tokens struct {
 }
 
 type Service struct {
-	repo *Repository
-	cfg  config.Auth
-	log  *slog.Logger
+	repo     *Repository
+	resets   resetStore
+	notifier Notifier
+	cfg      config.Auth
+	log      *slog.Logger
+
+	// runAsync dispara os e-mails fora da requisição; os testes trocam por
+	// uma chamada síncrona.
+	runAsync func(func())
 }
 
-func NewService(repo *Repository, cfg config.Auth, log *slog.Logger) *Service {
+func NewService(repo *Repository, cfg config.Auth, notifier Notifier, log *slog.Logger) *Service {
 	if cfg.BcryptCost < bcrypt.MinCost || cfg.BcryptCost > bcrypt.MaxCost {
 		cfg.BcryptCost = bcrypt.DefaultCost
 	}
-	return &Service{repo: repo, cfg: cfg, log: log.With("component", "auth")}
+	return &Service{
+		repo:     repo,
+		resets:   repo,
+		notifier: notifier,
+		cfg:      cfg,
+		log:      log.With("component", "auth"),
+		runAsync: func(f func()) { go f() },
+	}
+}
+
+// PasswordError explica por que uma senha foi recusada. A mensagem é para
+// quem está digitando e pode ir direto para a tela.
+type PasswordError struct{ Reason string }
+
+func (e *PasswordError) Error() string { return e.Reason }
+
+// ValidatePassword aplica a regra de senha do cadastro e da redefinição.
+func ValidatePassword(password string) error {
+	if len([]rune(password)) < 10 {
+		return &PasswordError{Reason: "a senha precisa ter ao menos 10 caracteres"}
+	}
+	// O bcrypt só considera os primeiros 72 bytes; acima disso recusamos em
+	// vez de ignorar o resto da senha em silêncio.
+	if len(password) > 72 {
+		return &PasswordError{Reason: "a senha pode ter no máximo 72 bytes (cerca de 72 letras sem acento)"}
+	}
+	return nil
 }
 
 func (s *Service) HashPassword(plain string) (string, error) {
@@ -173,29 +205,70 @@ func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*User, error) {
 
 func (s *Service) ListUsers(ctx context.Context) ([]*User, error) { return s.repo.List(ctx) }
 
+// NewUser é o cadastro completo de um usuário.
+type NewUser struct {
+	Email    string
+	Name     string
+	Role     string
+	Password string
+	Phone    string
+	Document string
+}
+
+// Profile são os dados editáveis de um usuário já cadastrado.
+type Profile struct {
+	Name     string
+	Phone    string
+	Document string
+	Active   bool
+}
+
 // CreateUser cadastra um usuário já com a senha cifrada.
 func (s *Service) CreateUser(ctx context.Context, email, name, role, password string) (*User, error) {
-	email = strings.TrimSpace(strings.ToLower(email))
+	return s.Register(ctx, NewUser{Email: email, Name: name, Role: role, Password: password})
+}
+
+// Register cadastra um usuário com todos os dados de perfil.
+func (s *Service) Register(ctx context.Context, in NewUser) (*User, error) {
+	email := strings.TrimSpace(strings.ToLower(in.Email))
+	name, role, password := strings.TrimSpace(in.Name), in.Role, in.Password
 	if !strings.Contains(email, "@") {
 		return nil, fmt.Errorf("e-mail inválido")
 	}
 	if !ValidRole(role) {
 		return nil, fmt.Errorf("perfil inválido: %q", role)
 	}
-	if len(password) < 10 {
-		return nil, fmt.Errorf("a senha precisa ter ao menos 10 caracteres")
+	if err := ValidatePassword(password); err != nil {
+		return nil, err
 	}
 
 	hash, err := s.HashPassword(password)
 	if err != nil {
 		return nil, err
 	}
-	user := &User{Email: email, Name: name, Role: role, PasswordHash: hash, Active: true}
+	user := &User{
+		Email: email, Name: name, Role: role, PasswordHash: hash, Active: true,
+		Phone: strings.TrimSpace(in.Phone), Document: strings.TrimSpace(in.Document),
+	}
 	if err := s.repo.Create(ctx, user); err != nil {
 		return nil, err
 	}
 	return user, nil
 }
+
+// UpdateProfile altera nome, contato e situação de um usuário.
+func (s *Service) UpdateProfile(ctx context.Context, id uuid.UUID, p Profile) (*User, error) {
+	p.Name = strings.TrimSpace(p.Name)
+	if p.Name == "" {
+		return nil, fmt.Errorf("o nome é obrigatório")
+	}
+	p.Phone, p.Document = strings.TrimSpace(p.Phone), strings.TrimSpace(p.Document)
+	return s.repo.UpdateProfile(ctx, id, p)
+}
+
+// RandomPassword gera uma senha que ninguém conhece, para contas que vão
+// definir a senha pelo link de convite.
+func RandomPassword() (string, error) { return newOpaqueToken() }
 
 // EnsureBootstrapUser cria o primeiro administrador quando o banco está vazio.
 func (s *Service) EnsureBootstrapUser(ctx context.Context, cfg config.Bootstrap) error {
@@ -227,12 +300,17 @@ func (s *Service) CleanupExpiredTokens(ctx context.Context) {
 	} else if removed > 0 {
 		s.log.Info("refresh tokens antigos removidos", "count", removed)
 	}
+	if removed, err := s.repo.DeleteStalePasswordResets(ctx); err != nil {
+		s.log.Warn("falha ao limpar pedidos de redefinição de senha", "err", err)
+	} else if removed > 0 {
+		s.log.Info("pedidos de redefinição de senha vencidos removidos", "count", removed)
+	}
 }
 
 func newOpaqueToken() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("gerando refresh token: %w", err)
+		return "", fmt.Errorf("gerando token: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }

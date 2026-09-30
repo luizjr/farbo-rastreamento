@@ -8,8 +8,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
-	"github.com/farbo/tracker-platform/backend/internal/telemetry"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/telemetry"
 )
 
 // readChunk é o tamanho de cada leitura do socket.
@@ -31,6 +31,8 @@ type session struct {
 
 	buf        []byte
 	registered bool
+	// ip é o endereço do rastreador (conta nas conexões não identificadas).
+	ip string
 }
 
 func (s *session) run(ctx context.Context) {
@@ -41,7 +43,13 @@ func (s *session) run(ctx context.Context) {
 	defer stop()
 
 	for {
-		if err := s.conn.Conn.SetReadDeadline(time.Now().Add(s.server.cfg.ReadTimeout)); err != nil {
+		// Até se identificar, o prazo é curto: não dá para segurar a vaga
+		// sem mandar o login.
+		timeout := s.server.cfg.ReadTimeout
+		if !s.registered {
+			timeout = s.server.cfg.IdentifyTimeout
+		}
+		if err := s.conn.Conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
 			return
 		}
 
@@ -211,6 +219,7 @@ func (s *session) dispatch(ctx context.Context, proto protocols.TrackerProtocol,
 			s.server.manager.Register(s.conn)
 			s.server.metrics.Connections.Set(float64(s.server.manager.Count()))
 			s.registered = true
+			s.server.releasePending(s.ip)
 			s.log = s.log.With("imei", telemetry.IMEI(s.conn.IMEI()))
 			s.log.Info("sessão de rastreador registrada")
 		}

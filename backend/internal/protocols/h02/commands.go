@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
 )
 
 // Comandos do H02 viajam como texto, mesmo quando as posições vêm em binário:

@@ -30,8 +30,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
-	"github.com/farbo/tracker-platform/backend/internal/protocols/gt06"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols/gt06"
 )
 
 type options struct {

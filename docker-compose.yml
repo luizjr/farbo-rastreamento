@@ -10,8 +10,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    # Só na máquina (ex.: túnel SSH para administrar). O backend fala com o
+    # banco pela rede interna do compose. Sem o 127.0.0.1 o Docker publica em
+    # todas as interfaces e passa por cima do firewall (UFW) do servidor.
     ports:
-      - '${POSTGRES_PORT:-5432}:5432'
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-tracker} -d ${POSTGRES_DB:-tracker}']
       interval: 10s
@@ -21,11 +24,23 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --save 60 1 --loglevel warning
+    # Com senha: sem ela qualquer um que alcance o Redis lê e publica eventos
+    # de tempo real. (Os eventos ainda vão assinados pelo backend.)
+    command:
+      - redis-server
+      - --save
+      - '60'
+      - '1'
+      - --loglevel
+      - warning
+      - --requirepass
+      - ${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env}
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
     volumes:
       - redis-data:/data
     ports:
-      - '${REDIS_PORT:-6379}:6379'
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
@@ -57,9 +72,72 @@ services:
       REDIS_ENABLED: ${REDIS_ENABLED:-true}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
 
       JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      # Proxies cujo X-Forwarded-For é aceito para saber o IP do cliente
+      # (limite de login, auditoria). O padrão cobre as redes privadas, onde
+      # fica o nginx do frontend. Com um proxy HTTPS na frente, ponha o IP dele.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}
+
+      # E-mail de redefinição de senha. Sem SMTP_HOST nenhum e-mail sai.
+      APP_URL: ${APP_URL:-}
+      PASSWORD_RESET_TTL: ${PASSWORD_RESET_TTL:-1h}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_TLS: ${SMTP_TLS:-starttls}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      CUSTOMER_INVITE_TTL: ${CUSTOMER_INVITE_TTL:-72h}
+
+      # Cobrança dos clientes (faturas e suspensão por atraso).
+      BILLING_INVOICE_LEAD_DAYS: ${BILLING_INVOICE_LEAD_DAYS:-10}
+      BILLING_SUSPEND_AFTER_DAYS: ${BILLING_SUSPEND_AFTER_DAYS:-10}
+      BILLING_TIMEZONE: ${BILLING_TIMEZONE:-America/Sao_Paulo}
+
+      # Preços de um rastreador novo contratado pelo cliente (centavos).
+      CATALOG_PLAN_NAME: ${CATALOG_PLAN_NAME:-Plano Mensal}
+      CATALOG_PLAN_PRICE_CENTS: ${CATALOG_PLAN_PRICE_CENTS:-6990}
+      CATALOG_DEFAULT_DUE_DAY: ${CATALOG_DEFAULT_DUE_DAY:-10}
+      CATALOG_EQUIPMENT_NAME: ${CATALOG_EQUIPMENT_NAME:-Rastreador J16 GT06}
+      CATALOG_EQUIPMENT_PRICE_CENTS: ${CATALOG_EQUIPMENT_PRICE_CENTS:-15000}
+      CATALOG_SETUP_DUE_DAYS: ${CATALOG_SETUP_DUE_DAYS:-3}
+
+      # Pix das faturas pela AbacatePay. Sem chave, o Pix online fica desligado.
+      ABACATEPAY_API_KEY: ${ABACATEPAY_API_KEY:-}
+      ABACATEPAY_WEBHOOK_SECRET: ${ABACATEPAY_WEBHOOK_SECRET:-}
+      PIX_EXPIRES_IN: ${PIX_EXPIRES_IN:-24h}
+
+      # Histórico guardado (7, 14 ou 30 dias; cliente e veículo podem ter o próprio).
+      HISTORY_RETENTION_DAYS: ${HISTORY_RETENTION_DAYS:-30}
+      HISTORY_CLEANUP_INTERVAL: ${HISTORY_CLEANUP_INTERVAL:-1h}
+      # Guardar o pacote bruto de cada posição (depuração; ~3x mais disco).
+      POSITIONS_STORE_RAW: ${POSITIONS_STORE_RAW:-false}
+      # Gravação das posições sem esperar o fsync (ver README, "Capacidade").
+      TELEMETRY_SYNCHRONOUS_COMMIT: ${TELEMETRY_SYNCHRONOUS_COMMIT:-false}
+      POSTGRES_TELEMETRY_MAX_CONNS: ${POSTGRES_TELEMETRY_MAX_CONNS:-10}
+
+      # Envio do rastreador pelo Melhor Envios (etiqueta e rastreio).
+      MELHORENVIO_SANDBOX: ${MELHORENVIO_SANDBOX:-true}
+      MELHORENVIO_CLIENT_ID: ${MELHORENVIO_CLIENT_ID:-}
+      MELHORENVIO_CLIENT_SECRET: ${MELHORENVIO_CLIENT_SECRET:-}
+      MELHORENVIO_TOKEN: ${MELHORENVIO_TOKEN:-}
+      MELHORENVIO_CONTACT_EMAIL: ${MELHORENVIO_CONTACT_EMAIL:-}
+      MELHORENVIO_FROM_NAME: ${MELHORENVIO_FROM_NAME:-}
+      MELHORENVIO_FROM_PHONE: ${MELHORENVIO_FROM_PHONE:-}
+      MELHORENVIO_FROM_EMAIL: ${MELHORENVIO_FROM_EMAIL:-}
+      MELHORENVIO_FROM_DOCUMENT: ${MELHORENVIO_FROM_DOCUMENT:-}
+      MELHORENVIO_FROM_COMPANY_DOCUMENT: ${MELHORENVIO_FROM_COMPANY_DOCUMENT:-}
+      MELHORENVIO_FROM_STATE_REGISTER: ${MELHORENVIO_FROM_STATE_REGISTER:-}
+      MELHORENVIO_FROM_POSTAL_CODE: ${MELHORENVIO_FROM_POSTAL_CODE:-}
+      MELHORENVIO_FROM_ADDRESS: ${MELHORENVIO_FROM_ADDRESS:-}
+      MELHORENVIO_FROM_NUMBER: ${MELHORENVIO_FROM_NUMBER:-}
+      MELHORENVIO_FROM_COMPLEMENT: ${MELHORENVIO_FROM_COMPLEMENT:-}
+      MELHORENVIO_FROM_DISTRICT: ${MELHORENVIO_FROM_DISTRICT:-}
+      MELHORENVIO_FROM_CITY: ${MELHORENVIO_FROM_CITY:-}
+      MELHORENVIO_FROM_STATE: ${MELHORENVIO_FROM_STATE:-}
 
       # Primeiro acesso: criado apenas se não houver nenhum usuário.
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
@@ -73,6 +151,11 @@ services:
 
       DEVICE_STALE_AFTER: ${DEVICE_STALE_AFTER:-2m}
       DEVICE_OFFLINE_AFTER: ${DEVICE_OFFLINE_AFTER:-5m}
+
+      # Conexão TCP que não se identifica (login do rastreador) nesse prazo é
+      # derrubada, e cada IP só mantém esse número de conexões sem login.
+      TCP_IDENTIFY_TIMEOUT: ${TCP_IDENTIFY_TIMEOUT:-30s}
+      TCP_MAX_PENDING_PER_IP: ${TCP_MAX_PENDING_PER_IP:-100}
 
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_FORMAT: json
@@ -90,7 +173,9 @@ services:
       # Captura de tráfego não identificado pelo adaptador TKSTAR V4 (§38).
       TKSTAR_V4_CAPTURE: ${TKSTAR_V4_CAPTURE:-false}
     ports:
-      - '${HTTP_PORT:-8080}:8080'
+      # A API chega ao público pelo nginx do frontend; direto, só na máquina
+      # (o /metrics também fica aqui).
+      - '127.0.0.1:${HTTP_PORT:-8080}:8080'
       - '${TCP_PORT:-5000}:5000'
 
   frontend:
@@ -103,7 +188,7 @@ services:
       - '${FRONTEND_PORT:-3000}:80'
 
   prometheus:
-    image: prom/prometheus:v2.54.1
+    image: prom/prometheus:v3.15.0
     restart: unless-stopped
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -112,22 +197,24 @@ services:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     ports:
-      - '${PROMETHEUS_PORT:-9090}:9090'
+      - '127.0.0.1:${PROMETHEUS_PORT:-9090}:9090'
 
   grafana:
-    image: grafana/grafana:11.2.0
+    image: grafana/grafana:12.4.12
     restart: unless-stopped
     depends_on:
       - prometheus
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?defina GRAFANA_PASSWORD no .env}
       GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
     volumes:
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
+    # Acesse por túnel SSH (ssh -L 3001:localhost:3001 servidor).
     ports:
-      - '${GRAFANA_PORT:-3001}:3000'
+      - '127.0.0.1:${GRAFANA_PORT:-3001}:3000'
 
 volumes:
   postgres-data:

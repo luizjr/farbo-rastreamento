@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
 )
 
 const Name = "h02"

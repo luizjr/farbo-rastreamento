@@ -48,6 +48,28 @@ type Device struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// ForCustomer devolve uma cópia sem o que é só da central: credenciais do
+// chip e do aparelho, textos de comando, servidor e anotações internas. O
+// formato do JSON não muda; os campos só chegam vazios.
+func (d *Device) ForCustomer() *Device {
+	if d == nil {
+		return nil
+	}
+	return &Device{
+		ID:               d.ID,
+		IMEI:             d.IMEI,
+		Model:            d.Model,
+		Manufacturer:     d.Manufacturer,
+		Protocol:         d.Protocol,
+		Firmware:         d.Firmware,
+		Status:           d.Status,
+		LastSeenAt:       d.LastSeenAt,
+		CommandOverrides: map[string]string{},
+		CreatedAt:        d.CreatedAt,
+		UpdatedAt:        d.UpdatedAt,
+	}
+}
+
 // Input é o payload aceito na criação/edição de um dispositivo.
 type Input struct {
 	IMEI                     string            `json:"imei"`

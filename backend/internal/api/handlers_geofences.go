@@ -4,11 +4,16 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/farbo/tracker-platform/backend/internal/audit"
-	"github.com/farbo/tracker-platform/backend/internal/geofences"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/audit"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/geofences"
 )
 
 func (s *Server) handleListGeofences(w http.ResponseWriter, r *http.Request) {
+	// As cercas são da operação da central; o cliente não as vê.
+	if _, isCustomer := customerOf(r); isCustomer {
+		writeJSON(w, http.StatusOK, []struct{}{})
+		return
+	}
 	list, err := s.Geofences.List(r.Context())
 	if err != nil {
 		handleStoreError(w, err, "cercas não encontradas")

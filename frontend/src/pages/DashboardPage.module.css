@@ -72,8 +72,18 @@
   }
 
   .sidebar {
-    max-height: 38dvh;
+    max-height: 32dvh;
     border-right: none;
     border-bottom: 1px solid var(--border-subtle);
+  }
+
+  /* Em tela baixa, a coluna rola em vez de deixar o mapa (cujas camadas do
+     Leaflet ficam acima de tudo) invadir a barra do veículo selecionado. */
+  .main {
+    overflow-y: auto;
+  }
+
+  .mapArea {
+    flex: 1 0 240px;
   }
 }

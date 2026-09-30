@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/farbo/tracker-platform/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
 )
 
 // Origem do registro. Heartbeat não traz coordenada própria.
@@ -97,7 +97,7 @@ func (r *Repository) Insert(ctx context.Context, p *Position) error {
 		INSERT INTO positions (device_id, gps_timestamp, latitude, longitude, speed_kmh, heading,
 			altitude, gps_valid, satellites, hdop, acc, battery_voltage, battery_percent,
 			gsm_level, relay_on, protocol, source, raw_payload)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NULLIF($18, ''))
 		RETURNING id, received_at`,
 		p.DeviceID, p.GPSTimestamp, p.Latitude, p.Longitude, p.SpeedKmh, p.Heading,
 		p.Altitude, p.GPSValid, p.Satellites, p.HDOP, p.ACC, p.BatteryVoltage,

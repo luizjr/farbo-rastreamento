@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
 )
 
 // Números de protocolo. DOCUMENTED: especificação GT06/GT06N/Concox.

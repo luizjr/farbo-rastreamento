@@ -14,6 +14,8 @@ import styles from './TrackerMap.module.css';
 const DEFAULT_CENTER: LatLngTuple = [-23.5505, -46.6333];
 const DEFAULT_ZOOM = 13;
 const MOVING_SPEED_KMH = 3;
+/** Verde da marca, o mesmo da landing. */
+const BRAND_GREEN = '#3be558';
 
 interface TrackerMapProps {
   vehicles: VehicleView[];
@@ -80,7 +82,7 @@ export function TrackerMap({
                 key={fence.id}
                 center={[fence.latitude, fence.longitude]}
                 radius={fence.radiusMeters}
-                pathOptions={{ color: '#3d9ae8', fillOpacity: 0.08, weight: 1.5, dashArray: '4 4' }}
+                pathOptions={{ color: BRAND_GREEN, fillOpacity: 0.08, weight: 1.5, dashArray: '4 4' }}
               >
                 <Popup>
                   <div className={styles.popup}>
@@ -94,8 +96,13 @@ export function TrackerMap({
               </Circle>
             ))}
 
+        {/* Contorno escuro por baixo do trajeto, para o verde continuar
+            legível também sobre o mapa claro. */}
         {trackLine.length > 1 && (
-          <Polyline positions={trackLine} pathOptions={{ color: '#3d9ae8', weight: 3, opacity: 0.85 }} />
+          <>
+            <Polyline positions={trackLine} pathOptions={{ color: '#060907', weight: 6, opacity: 0.45 }} />
+            <Polyline positions={trackLine} pathOptions={{ color: BRAND_GREEN, weight: 3.5, opacity: 0.95 }} />
+          </>
         )}
 
         {track && track.length > 1 && (

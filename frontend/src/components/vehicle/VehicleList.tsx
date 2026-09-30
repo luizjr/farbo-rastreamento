@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
 
 import { Badge } from '@/components/ui/Badge';
+import { Link } from 'react-router-dom';
+
 import { EmptyState } from '@/components/ui/EmptyState';
+import { useAuth } from '@/stores/AuthContext';
 import { formatDeviceStatus, formatRelative, formatSpeed } from '@/services/format';
 import type { DeviceStatus, VehicleView } from '@/types';
 
@@ -27,6 +30,7 @@ function statusTone(status: DeviceStatus | undefined | null) {
 }
 
 export function VehicleList({ vehicles, selectedId, onSelect }: VehicleListProps) {
+  const { isCustomer } = useAuth();
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
@@ -69,7 +73,14 @@ export function VehicleList({ vehicles, selectedId, onSelect }: VehicleListProps
             title={vehicles.length === 0 ? 'Nenhum veículo cadastrado' : 'Nada encontrado'}
             description={
               vehicles.length === 0
-                ? 'Cadastre um rastreador e vincule-o a um veículo para começar.'
+                ? isCustomer
+                  ? (
+                      <>
+                        Cadastre seu veículo em <Link to="/meus-veiculos">Meus veículos</Link>; ele
+                        aparece aqui assim que o rastreador for instalado.
+                      </>
+                    )
+                  : 'Cadastre um rastreador e vincule-o a um veículo para começar.'
                 : 'Ajuste a busca para ver outros veículos.'
             }
           />

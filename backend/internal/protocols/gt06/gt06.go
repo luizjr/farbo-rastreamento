@@ -12,7 +12,7 @@ package gt06
 import (
 	"fmt"
 
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
 )
 
 const Name = "gt06"

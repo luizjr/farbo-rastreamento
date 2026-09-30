@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
 )
 
 // Quadro de texto da família H02:

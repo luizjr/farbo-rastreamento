@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react';
 
 import { websocketUrl } from '@/api/client';
+import { parseRealtimeMessage } from '@/api/realtime';
 import { useAuth } from '@/stores/AuthContext';
 import type { RealtimeEventType, RealtimeMessage } from '@/types';
 
@@ -63,12 +64,10 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       };
 
       socket.onmessage = (event) => {
-        let message: RealtimeMessage;
-        try {
-          message = JSON.parse(event.data as string) as RealtimeMessage;
-        } catch {
-          return;
-        }
+        // Evento malformado ou com valor fora da faixa é ignorado: nada que
+        // não passou pela conferência chega ao cache nem ao mapa.
+        const message = typeof event.data === 'string' ? parseRealtimeMessage(event.data) : null;
+        if (!message) return;
         handlersRef.current.forEach(({ types, handler }) => {
           if (types === 'all' || types.includes(message.type)) {
             handler(message);

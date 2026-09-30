@@ -45,8 +45,19 @@ backend/
     ├── commands/        ciclo de vida do comando + regra de segurança
     ├── geofences/       cercas circulares
     ├── audit/           trilha de auditoria
-    ├── auth/            JWT, refresh token, RBAC
-    ├── websocket/       hub, cliente, ponte Redis
+    ├── auth/            JWT, refresh token, RBAC, redefinição de senha
+    ├── mail/            SMTP e os e-mails da conta
+    ├── billing/         assinaturas, faturas, geração mensal, suspensão
+    ├── orders/          Novo veículo: veículo → rastreador → assinatura (+ fatura do equipamento), numa transação
+    ├── installers/      prestadores de instalação recomendados (lista pública da landing)
+    ├── addresses/       endereço de entrega do cliente (copiado na assinatura ao contratar)
+    ├── fulfillment/     pedidos: linhas do tempo do chip M2M e do rastreador, etiqueta e rastreio
+    ├── melhorenvio/     cliente da API do Melhor Envios (OAuth, frete, etiqueta, rastreio, webhook)
+    ├── retention/       por quantos dias guardar o histórico de cada veículo (7/14/30) e a limpeza
+    ├── payments/        Pix das faturas e baixa automática
+    │   └── abacatepay/  cliente da API v2 e verificação de webhook
+    ├── websocket/       hub, cliente, ponte Redis (mensagens assinadas)
+    ├── realtime/        confere o "data" de cada evento vindo do Redis
     ├── api/             rotas REST e middlewares
     ├── database/        pool pgx e migrations
     ├── telemetry/       log estruturado, métricas, tracing
@@ -154,6 +165,9 @@ uma enxurrada de eventos falsos de entrada em cerca.
 | TCP | limite de tamanho de pacote, timeout de leitura, teto de conexões, sessão isolada de pânico |
 | Ingestão | IMEI desconhecido encerra a sessão; pacote inválido é capturado, não derruba a conexão |
 | API | JWT com rotação de refresh token, RBAC por rota, rate limit por IP (mais apertado no login), corpo limitado, campo desconhecido recusado |
+| Painel do cliente | perfil `customer` filtrado no ponto único `vehicleFromURL` (veículo alheio = 404), rotas da central com `RequireRole`, WebSocket filtrado por dono (índice em memória), rastreador sem credenciais na resposta, cota de veículos checada na mesma transação da inserção, suspensão por atraso (402) |
+| Pagamentos | chave da AbacatePay só no ambiente (nunca em log), webhook com segredo na URL + HMAC do corpo + idempotência por id, baixa só depois de reconsultar o Pix na API, cliente só gera/consulta Pix das próprias faturas |
+| Redefinição de senha | mesma resposta com ou sem conta, e-mail enviado fora da requisição (sem diferença de tempo), token de 256 bits guardado como hash, uso único, validade curta, um pedido por minuto por conta, troca revoga todas as sessões |
 | Comandos | trava de velocidade no backend, texto sanitizado contra injeção, `CUSTOM` restrito a admin, auditoria de tudo |
 | Logs | IMEI mascarado; senha, token e credencial nunca registrados |
 
@@ -161,7 +175,10 @@ uma enxurrada de eventos falsos de entrada em cerca.
 
 Com `REDIS_ENABLED=true`, os eventos do WebSocket são replicados entre
 instâncias por pub/sub, com a mensagem carregando a origem para não voltar
-duplicada. O que **não** escala assim é a sessão TCP: o comando só sai pela
+duplicada. O Redis é tratado como transporte não confiável: cada mensagem vai
+assinada (HMAC-SHA256, chave derivada do `JWT_SECRET`) e com prazo de 2
+minutos, e quem recebe refaz o `data` no tipo Go que o backend publica
+(`realtime.Decode`) antes de entregar ao navegador. O que **não** escala assim é a sessão TCP: o comando só sai pela
 instância onde o rastreador está conectado. Para várias instâncias, ou se usa
 afinidade por IMEI no balanceador, ou se acrescenta um roteamento de comandos
 por Redis — ponto de extensão ainda não implementado.

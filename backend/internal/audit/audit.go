@@ -11,14 +11,19 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/farbo/tracker-platform/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
 )
 
 // Ações auditadas.
 const (
-	ActionLogin            = "AUTH_LOGIN"
-	ActionLoginFailed      = "AUTH_LOGIN_FAILED"
-	ActionLogout           = "AUTH_LOGOUT"
+	ActionLogin       = "AUTH_LOGIN"
+	ActionLoginFailed = "AUTH_LOGIN_FAILED"
+	ActionLogout      = "AUTH_LOGOUT"
+
+	ActionPasswordResetRequested = "AUTH_PASSWORD_RESET_REQUESTED"
+	ActionPasswordReset          = "AUTH_PASSWORD_RESET"
+	ActionPasswordResetFailed    = "AUTH_PASSWORD_RESET_FAILED"
+
 	ActionCommandRequested = "COMMAND_REQUESTED"
 	ActionCommandSent      = "COMMAND_SENT"
 	ActionCommandRejected  = "COMMAND_REJECTED"
@@ -30,6 +35,30 @@ const (
 	ActionVehicleUpdated   = "VEHICLE_UPDATED"
 	ActionVehicleDeleted   = "VEHICLE_DELETED"
 	ActionGeofenceChanged  = "GEOFENCE_CHANGED"
+
+	ActionCustomerCreated      = "CUSTOMER_CREATED"
+	ActionCustomerUpdated      = "CUSTOMER_UPDATED"
+	ActionCustomerInvited      = "CUSTOMER_INVITED"
+	ActionSubscriptionCreated  = "SUBSCRIPTION_CREATED"
+	ActionSubscriptionUpdated  = "SUBSCRIPTION_UPDATED"
+	ActionSubscriptionCanceled = "SUBSCRIPTION_CANCELED"
+	ActionInvoiceCreated       = "INVOICE_CREATED"
+	ActionInvoiceUpdated       = "INVOICE_UPDATED"
+	ActionInvoicePaid          = "INVOICE_PAID"
+	ActionInvoiceCanceled      = "INVOICE_CANCELED"
+	ActionTrackerOrdered       = "TRACKER_ORDERED"
+	ActionInstallerChanged     = "INSTALLER_CHANGED"
+	ActionDeliveryAddressSaved = "DELIVERY_ADDRESS_SAVED"
+	ActionFulfillmentChanged   = "FULFILLMENT_CHANGED"
+	ActionShippingLabelBought  = "SHIPPING_LABEL_BOUGHT"
+	ActionRetentionChanged     = "HISTORY_RETENTION_CHANGED"
+	ActionPaymentPixCreated    = "PAYMENT_PIX_CREATED"
+	ActionPaymentRefundAsked   = "PAYMENT_REFUND_REQUESTED"
+	ActionPaymentRefunded      = "PAYMENT_REFUNDED"
+	ActionPaymentDisputed      = "PAYMENT_DISPUTED"
+	// ActionPaymentUnmatched: Pix pago para fatura que não estava mais em
+	// aberto — precisa de revisão (devolver ou aproveitar o valor).
+	ActionPaymentUnmatched = "PAYMENT_UNMATCHED"
 )
 
 type Entry struct {

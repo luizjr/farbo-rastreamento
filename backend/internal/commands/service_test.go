@@ -12,13 +12,13 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/farbo/tracker-platform/backend/internal/audit"
-	"github.com/farbo/tracker-platform/backend/internal/config"
-	"github.com/farbo/tracker-platform/backend/internal/devices"
-	"github.com/farbo/tracker-platform/backend/internal/events"
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
-	"github.com/farbo/tracker-platform/backend/internal/protocols/gt06"
-	"github.com/farbo/tracker-platform/backend/internal/telemetry"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/audit"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/config"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/devices"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/events"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols/gt06"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/telemetry"
 )
 
 // ---------------------------------------------------------------------------

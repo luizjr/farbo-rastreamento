@@ -1,44 +1,115 @@
 /*
  * Tokens de design da plataforma.
  *
- * O painel é escuro por padrão porque quase sempre fica aberto em segundo
- * plano ao lado de um mapa; o tema claro existe para uso diurno em campo.
+ * O painel segue a identidade da landing page: fundo quase preto e verde neon
+ * como cor de marca. É escuro por padrão porque quase sempre fica aberto em
+ * segundo plano ao lado de um mapa; o tema claro existe para uso diurno em
+ * campo.
+ *
+ * As cores também valem para [data-theme='dark'] para que um trecho da tela
+ * (o cabeçalho, a tela de login) possa continuar escuro mesmo com o tema
+ * claro ativo — a logo tem letras brancas e só funciona sobre fundo escuro.
  */
-:root {
+:root,
+[data-theme='dark'] {
   /* Superfícies */
-  --surface-base: #0b1017;
-  --surface-raised: #121a24;
-  --surface-overlay: #18222e;
-  --surface-sunken: #070b10;
-  --surface-hover: #1d2937;
+  --surface-base: #060907;
+  --surface-raised: #0d130e;
+  --surface-overlay: #121a14;
+  --surface-sunken: #040705;
+  --surface-hover: #17211a;
 
   /* Bordas */
-  --border-subtle: #1e2a37;
-  --border-strong: #2c3c4e;
+  --border-subtle: #1b241d;
+  --border-strong: #28342b;
 
   /* Texto */
-  --text-primary: #e8eef5;
-  --text-secondary: #9fb0c3;
-  --text-muted: #6b7f95;
-  --text-inverse: #0b1017;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-inverse: #060907;
 
   /* Marca e estados */
-  --accent: #3d9ae8;
-  --accent-strong: #2d86d0;
-  --accent-soft: rgba(61, 154, 232, 0.14);
+  --accent: #3be558;
+  --accent-strong: #4af067;
+  --accent-soft: rgba(59, 229, 88, 0.12);
+  /* Texto sobre fundo --accent: o verde neon pede letra escura. */
+  --accent-contrast: #060907;
+  --accent-glow: rgba(59, 229, 88, 0.35);
 
-  --success: #3fbf7f;
-  --success-soft: rgba(63, 191, 127, 0.14);
+  --success: #3be558;
+  --success-soft: rgba(59, 229, 88, 0.12);
 
-  --warning: #e0a33a;
-  --warning-soft: rgba(224, 163, 58, 0.14);
+  --warning: #f0b43c;
+  --warning-soft: rgba(240, 180, 60, 0.14);
 
-  --danger: #e2574c;
-  --danger-strong: #c9463c;
-  --danger-soft: rgba(226, 87, 76, 0.14);
+  --danger: #ef5b52;
+  --danger-strong: #d9473e;
+  --danger-soft: rgba(239, 91, 82, 0.14);
 
-  --neutral: #6b7f95;
-  --neutral-soft: rgba(107, 127, 149, 0.14);
+  --neutral: #64748b;
+  --neutral-soft: rgba(100, 116, 139, 0.16);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.6);
+
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --surface-base: #f3f6f4;
+  --surface-raised: #ffffff;
+  --surface-overlay: #ffffff;
+  --surface-sunken: #e8eee9;
+  --surface-hover: #edf3ee;
+
+  --border-subtle: #dce4de;
+  --border-strong: #c3cfc6;
+
+  --text-primary: #0d130e;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --text-inverse: #ffffff;
+
+  /* O neon some sobre fundo branco; no claro a marca usa um verde mais
+     fechado, legível também como cor de texto. */
+  --accent: #15803d;
+  --accent-strong: #166534;
+  --accent-soft: rgba(21, 128, 61, 0.1);
+  --accent-contrast: #ffffff;
+  --accent-glow: rgba(21, 128, 61, 0.25);
+
+  --success: #15803d;
+  --success-soft: rgba(21, 128, 61, 0.1);
+
+  --warning: #b8791a;
+  --warning-soft: rgba(184, 121, 26, 0.12);
+
+  --danger: #cc3d33;
+  --danger-strong: #ab2f26;
+  --danger-soft: rgba(204, 61, 51, 0.12);
+
+  --neutral: #64748b;
+  --neutral-soft: rgba(100, 116, 139, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(13, 19, 14, 0.08);
+  --shadow-md: 0 4px 12px rgba(13, 19, 14, 0.12);
+  --shadow-lg: 0 12px 32px rgba(13, 19, 14, 0.16);
+
+  color-scheme: light;
+}
+
+:root {
+  /* Landing Page Neon Design Tokens */
+  --color-neon-green: #3be558;
+  --color-neon-green-hover: #4af067;
+  --color-neon-glow: rgba(59, 229, 88, 0.4);
+  --color-neon-soft: rgba(59, 229, 88, 0.12);
+  --landing-bg-dark: #060907;
+  --landing-card-bg: #0d130e;
+  --landing-card-border: rgba(255, 255, 255, 0.08);
+  --font-script: 'Caveat', cursive, sans-serif;
 
   /* Tipografia */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
@@ -61,15 +132,12 @@
   --space-6: 2rem;
   --space-7: 3rem;
 
-  /* Formas */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  /* Formas — cantos generosos e botões em pílula, como na landing */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
   --radius-full: 999px;
-
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45);
 
   /* Camadas */
   --z-map-overlay: 500;
@@ -82,40 +150,6 @@
   --transition-base: 200ms ease;
 
   /* Medidas do layout */
-  --header-height: 56px;
+  --header-height: 64px;
   --sidebar-width: 320px;
-}
-
-[data-theme='light'] {
-  --surface-base: #f4f6f9;
-  --surface-raised: #ffffff;
-  --surface-overlay: #ffffff;
-  --surface-sunken: #e7ecf2;
-  --surface-hover: #eef2f7;
-
-  --border-subtle: #dde3ec;
-  --border-strong: #c3ccd9;
-
-  --text-primary: #16202c;
-  --text-secondary: #4a5a6d;
-  --text-muted: #7a8899;
-  --text-inverse: #ffffff;
-
-  --accent: #1f7fd0;
-  --accent-strong: #1667ab;
-  --accent-soft: rgba(31, 127, 208, 0.12);
-
-  --success: #1f9e63;
-  --success-soft: rgba(31, 158, 99, 0.12);
-
-  --warning: #b8791a;
-  --warning-soft: rgba(184, 121, 26, 0.12);
-
-  --danger: #cc3d33;
-  --danger-strong: #ab2f26;
-  --danger-soft: rgba(204, 61, 51, 0.12);
-
-  --shadow-sm: 0 1px 2px rgba(22, 32, 44, 0.08);
-  --shadow-md: 0 4px 12px rgba(22, 32, 44, 0.12);
-  --shadow-lg: 0 12px 32px rgba(22, 32, 44, 0.16);
 }

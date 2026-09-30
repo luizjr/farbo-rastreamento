@@ -88,7 +88,7 @@ export function DevicesPage() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-            <Button onClick={() => setVehicleForm({ name: '' })}>Novo veículo</Button>
+            <Button onClick={() => setVehicleForm({ name: '' })}>Veículo da central</Button>
             <Button
               variant="primary"
               onClick={() => {
@@ -331,7 +331,7 @@ export function DevicesPage() {
       {/* Cadastro de veículo */}
       <Modal
         open={vehicleForm !== null}
-        title="Novo veículo"
+        title="Veículo da central"
         onClose={() => setVehicleForm(null)}
         footer={
           <>
@@ -350,6 +350,10 @@ export function DevicesPage() {
       >
         {vehicleForm && (
           <div className={styles.form}>
+            <p className={styles.note}>
+              Veículo da própria central, sem cliente. Veículo de cliente entra pela ficha dele, em
+              Novo veículo (veículo, rastreador e assinatura de uma vez).
+            </p>
             <TextField
               label="Nome"
               placeholder="Subaru"

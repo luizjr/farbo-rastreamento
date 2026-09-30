@@ -1,0 +1,273 @@
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 1.25rem 1.5rem;
+  background: transparent;
+  transition: all 0.3s ease;
+}
+
+.headerScrolled {
+  padding: 0.875rem 1.5rem;
+  background: rgba(6, 9, 7, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.container {
+  max-width: 1240px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.logoLink {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+}
+
+.logoImg {
+  display: block;
+  height: 36px;
+  width: auto;
+  object-fit: contain;
+  transition: height 0.3s ease;
+}
+
+.headerScrolled .logoImg {
+  height: 32px;
+}
+
+.logoFallbackText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+
+.brandTitle {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -0.5px;
+}
+
+.brandSubtitle {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--color-neon-green);
+  letter-spacing: 2.5px;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+
+.nav a {
+  color: #cbd5e1;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+}
+
+.nav a:hover {
+  color: var(--color-neon-green);
+  text-decoration: none;
+}
+
+.rightActions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.ctaButton {
+  background: var(--color-neon-green);
+  color: #060907;
+  border: none;
+  border-radius: 999px;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  box-shadow: 0 0 15px rgba(59, 229, 88, 0.35);
+  transition: all 0.25 ease;
+  white-space: nowrap;
+}
+
+.ctaButton:hover {
+  background: var(--color-neon-green-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 0 25px rgba(59, 229, 88, 0.55);
+}
+
+.loginLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6875rem 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  color: #e2e8f0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.loginLink:hover {
+  border-color: var(--color-neon-green);
+  color: var(--color-neon-green);
+  text-decoration: none;
+}
+
+.mobileCtaBtn,
+.mobileLoginLink {
+  display: none;
+}
+
+/* Telas médias: o link vira só o ícone para o menu caber numa linha. */
+@media (max-width: 1180px) {
+  .nav {
+    gap: 1.5rem;
+  }
+
+  .loginLink {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .loginLink span {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .nav {
+    gap: 1.1rem;
+  }
+
+  .nav a {
+    font-size: 0.875rem;
+  }
+
+  .ctaButton {
+    padding: 0.75rem 1.1rem;
+    font-size: 0.875rem;
+  }
+
+  .logoImg,
+  .headerScrolled .logoImg {
+    height: 32px;
+  }
+}
+
+.hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 28px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  z-index: 1001;
+}
+
+.bar {
+  width: 100%;
+  height: 2.5px;
+  background-color: #ffffff;
+  border-radius: 2px;
+  transition: all 0.3s ease;
+}
+
+/* Responsive Mobile Navigation */
+@media (max-width: 960px) {
+  .nav {
+    position: fixed;
+    top: 0;
+    right: -100%;
+    width: 280px;
+    height: 100vh;
+    background: #0d130e;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 6rem 2rem 2rem 2rem;
+    gap: 1.5rem;
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.8);
+    transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .navOpen {
+    right: 0;
+  }
+
+  .nav a {
+    font-size: 1.125rem;
+    width: 100%;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .ctaButton,
+  .loginLink {
+    display: none;
+  }
+
+  .nav .mobileLoginLink {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    color: var(--color-neon-green);
+    font-weight: 600;
+  }
+
+  .mobileCtaBtn {
+    display: block;
+    width: 100%;
+    margin-top: 1rem;
+    background: var(--color-neon-green);
+    color: #060907;
+    border: none;
+    border-radius: 999px;
+    padding: 0.875rem 1.25rem;
+    font-size: 1rem;
+    font-weight: 800;
+  }
+
+  .hamburger {
+    display: flex;
+  }
+
+  .logoImg,
+  .headerScrolled .logoImg {
+    height: 28px;
+  }
+
+  .bar1Open {
+    transform: translateY(8.5px) rotate(45deg);
+  }
+
+  .bar2Open {
+    opacity: 0;
+  }
+
+  .bar3Open {
+    transform: translateY(-8.5px) rotate(-45deg);
+  }
+}

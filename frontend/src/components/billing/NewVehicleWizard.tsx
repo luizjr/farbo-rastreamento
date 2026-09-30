@@ -1,0 +1,429 @@
+import { useEffect, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
+import { ApiError } from '@/api/client';
+import { catalogApi, customersApi, meApi } from '@/api/resources';
+import type { VehicleInput } from '@/api/resources';
+import { AddressFields, EMPTY_ADDRESS, isAddressComplete } from '@/components/address/AddressFields';
+import { DeliveryBox } from '@/components/address/DeliveryBox';
+import {
+  DEFAULT_SUBSCRIPTION,
+  PLAN_PRESETS,
+  SubscriptionFields,
+  subscriptionFromDraft,
+} from '@/components/billing/SubscriptionFields';
+import type { SubscriptionDraft } from '@/components/billing/SubscriptionFields';
+import { InstallersModal } from '@/components/landing/InstallersModal';
+import { Button } from '@/components/ui/Button';
+import { SelectField, TextField } from '@/components/ui/Field';
+import { Modal } from '@/components/ui/Modal';
+import { Spinner } from '@/components/ui/Spinner';
+import { EMPTY_VEHICLE, VehicleFields } from '@/components/vehicle/VehicleFields';
+import { centsToInput, formatDateOnly, formatMoney, parseMoney, todayISO } from '@/services/format';
+import type { Catalog, CustomerAccount, DeliveryAddress, Device, Subscription, TrackerOrderResult } from '@/types';
+
+import pageStyles from '@/pages/Page.module.css';
+import styles from './Billing.module.css';
+
+const STEPS = ['Veículo', 'Rastreador', 'Assinatura'] as const;
+
+/** Para a central: o cliente da ficha, os aparelhos livres e o endereço dele. */
+export interface WizardAdmin {
+  customerId: string;
+  devices: Device[];
+  deliveryAddress: DeliveryAddress | null;
+  /** Assinatura ativa do cliente: o plano dela é a sugestão para o novo veículo. */
+  currentPlan: Subscription | null;
+}
+
+interface AdminDraft {
+  deviceId: string;
+  equipment: string;
+  dueDate: string;
+  plan: SubscriptionDraft;
+}
+
+function addDays(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const date = new Date(y, m - 1, d + days);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** Valor opcional: vazio é zero (não cobra). */
+function optionalMoney(text: string): number | null {
+  return text.trim() === '' ? 0 : parseMoney(text);
+}
+
+function adminDraftFrom(c: Catalog, current: Subscription | null): AdminDraft {
+  // Sugere o plano que o cliente já paga; no primeiro veículo, o padrão.
+  const preset = current
+    ? PLAN_PRESETS.find((p) => p.planName === current.planName && p.priceCents === current.priceCents)
+    : undefined;
+  const plan: SubscriptionDraft = current
+    ? {
+        preset: preset?.id ?? 'custom',
+        planName: current.planName,
+        price: centsToInput(current.priceCents),
+        dueDay: current.dueDay,
+      }
+    : { ...DEFAULT_SUBSCRIPTION, dueDay: c.defaultDueDay };
+  return {
+    deviceId: '',
+    equipment: centsToInput(c.equipmentPriceCents),
+    dueDate: addDays(todayISO(), c.setupDueDays),
+    plan,
+  };
+}
+
+/** A API responde 409 com este código quando falta o endereço de entrega. */
+function isAddressRequired(error: unknown): boolean {
+  return error instanceof ApiError && (error.body as { code?: string } | undefined)?.code === 'ADDRESS_REQUIRED';
+}
+
+/**
+ * O único caminho para incluir um veículo, para o cliente e para a central:
+ * 1. Veículo, 2. Rastreador (entrega e equipamento) e 3. Assinatura. No fim,
+ * um pedido só cria os três de uma vez.
+ *
+ * Sem `admin`, é o próprio cliente: preços e plano vêm do servidor e o
+ * endereço de entrega é obrigatório. Com `admin`, a central escolhe valores,
+ * plano e pode vincular um aparelho já instalado.
+ */
+export function NewVehicleWizard({
+  open,
+  admin,
+  onClose,
+  onDone,
+}: {
+  open: boolean;
+  admin?: WizardAdmin;
+  onClose: () => void;
+  onDone: (result: TrackerOrderResult) => void;
+}) {
+  const queryClient = useQueryClient();
+  const isAdmin = Boolean(admin);
+
+  const [step, setStep] = useState(0);
+  const [vehicle, setVehicle] = useState<VehicleInput>(EMPTY_VEHICLE);
+  // Endereço em edição (cliente); nulo mostra o endereço salvo.
+  const [addressDraft, setAddressDraft] = useState<DeliveryAddress | null>(null);
+  const [adminDraft, setAdminDraft] = useState<AdminDraft | null>(null);
+  const [error, setError] = useState('');
+  const [showInstallers, setShowInstallers] = useState(false);
+
+  const catalog = useQuery({ queryKey: ['catalog'], queryFn: catalogApi.get, enabled: open });
+  const account = useQuery({ queryKey: ['me', 'account'], queryFn: meApi.account, enabled: open && !isAdmin });
+  const c = catalog.data;
+  const address = isAdmin ? (admin?.deliveryAddress ?? null) : (account.data?.deliveryAddress ?? null);
+
+  useEffect(() => {
+    if (!open) return;
+    setStep(0);
+    setVehicle(EMPTY_VEHICLE);
+    setAddressDraft(null);
+    setAdminDraft(null);
+    setError('');
+  }, [open]);
+
+  // Os valores da central partem do catálogo, uma vez por abertura: uma nova
+  // busca do catálogo não pode apagar o que já foi digitado.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (!open) seeded.current = false;
+    else if (isAdmin && c && !seeded.current) {
+      seeded.current = true;
+      setAdminDraft(adminDraftFrom(c, admin?.currentPlan ?? null));
+    }
+    // O plano atual só importa na abertura (o ref impede semear de novo).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isAdmin, c]);
+
+  const saveAddress = useMutation({
+    mutationFn: meApi.saveAddress,
+    onSuccess: (saved) => {
+      queryClient.setQueryData<CustomerAccount>(['me', 'account'], (old) =>
+        old ? { ...old, deliveryAddress: saved } : old,
+      );
+      setAddressDraft(null);
+      setError('');
+      setStep(2);
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const order = useMutation({
+    mutationFn: async () => {
+      if (!admin) return meApi.orderTracker({ vehicle });
+      const d = adminDraft as AdminDraft;
+      const plan = subscriptionFromDraft(d.plan);
+      if (typeof plan === 'string') throw new Error(plan);
+      return customersApi.orderTracker(admin.customerId, {
+        vehicle: { ...vehicle, deviceId: d.deviceId || null },
+        equipmentCents: optionalMoney(d.equipment) ?? 0,
+        setupDueDate: d.dueDate || null,
+        plan,
+      });
+    },
+    onSuccess: onDone,
+    onError: (err: Error) => {
+      setError(err.message);
+      if (isAddressRequired(err)) {
+        setAddressDraft(EMPTY_ADDRESS);
+        setStep(1);
+        queryClient.invalidateQueries({ queryKey: ['me', 'account'] });
+      }
+    },
+  });
+
+  const loading = !c || (!isAdmin && account.isLoading) || (isAdmin && !adminDraft);
+  // O cliente sem endereço salvo cai direto no formulário.
+  const editingAddress = !isAdmin && (addressDraft !== null || !address);
+  const equipmentCents = isAdmin ? (adminDraft ? optionalMoney(adminDraft.equipment) : null) : (c?.equipmentPriceCents ?? 0);
+  const monthly = isAdmin
+    ? adminDraft
+      ? { name: adminDraft.plan.planName, cents: parseMoney(adminDraft.plan.price), dueDay: adminDraft.plan.dueDay }
+      : null
+    : c
+      ? { name: c.planName, cents: c.planPriceCents, dueDay: c.defaultDueDay }
+      : null;
+  const installedDevice = isAdmin && Boolean(adminDraft?.deviceId);
+
+  const goTo = (next: number) => {
+    setError('');
+    setStep(next);
+  };
+
+  const next = () => {
+    if (step === 0) return goTo(1);
+    if (step === 1) {
+      if (isAdmin && equipmentCents === null) {
+        return setError('Valor do equipamento inválido. Use, por exemplo, 150,00 (ou 0 para não cobrar).');
+      }
+      if (editingAddress) {
+        setError('');
+        return saveAddress.mutate(addressDraft ?? EMPTY_ADDRESS);
+      }
+      return goTo(2);
+    }
+    setError('');
+    order.mutate();
+  };
+
+  const canContinue =
+    step === 0
+      ? vehicle.name.trim() !== ''
+      : step === 1
+        ? !editingAddress || isAddressComplete(addressDraft ?? EMPTY_ADDRESS)
+        : true;
+
+  const primaryLabel =
+    step === 0
+      ? 'Continuar'
+      : step === 1
+        ? editingAddress
+          ? 'Salvar endereço e continuar'
+          : 'Continuar'
+        : isAdmin
+          ? 'Confirmar'
+          : `Confirmar pedido${equipmentCents ? ` · ${formatMoney(equipmentCents)}` : ''}`;
+
+  return (
+    <>
+      <Modal
+        open={open}
+        wide
+        title="Novo veículo"
+        onClose={onClose}
+        footer={
+          <>
+            {step === 0 ? (
+              <Button variant="ghost" onClick={onClose}>
+                Cancelar
+              </Button>
+            ) : (
+              <Button variant="ghost" onClick={() => goTo(step - 1)}>
+                Voltar
+              </Button>
+            )}
+            <Button
+              variant="primary"
+              loading={saveAddress.isPending || order.isPending}
+              disabled={loading || !canContinue}
+              onClick={next}
+            >
+              {primaryLabel}
+            </Button>
+          </>
+        }
+      >
+        <ol className={styles.steps} aria-label="Etapas">
+          {STEPS.map((label, index) => (
+            <li
+              key={label}
+              className={`${styles.step} ${index === step ? styles.stepActive : ''} ${index < step ? styles.stepDone : ''}`}
+              aria-current={index === step ? 'step' : undefined}
+            >
+              <button type="button" disabled={index >= step} onClick={() => goTo(index)}>
+                <span className={styles.stepNumber}>{index < step ? '✓' : index + 1}</span>
+                {label}
+              </button>
+            </li>
+          ))}
+        </ol>
+
+        {loading ? (
+          <Spinner label="Carregando" />
+        ) : (
+          <div className={pageStyles.form}>
+            {error && <div className={pageStyles.note}>{error}</div>}
+
+            {step === 0 && (
+              <>
+                <p className={pageStyles.description}>
+                  Qual veículo vai receber o rastreador?
+                </p>
+                <VehicleFields value={vehicle} onChange={setVehicle} autoFocus />
+              </>
+            )}
+
+            {step === 1 && admin && adminDraft && (
+              <>
+                <SelectField
+                  label="Aparelho"
+                  hint="Se o rastreador já foi instalado no veículo, escolha o aparelho para vincular agora."
+                  value={adminDraft.deviceId}
+                  onChange={(e) => setAdminDraft({ ...adminDraft, deviceId: e.target.value })}
+                >
+                  <option value="">Enviar ao cliente (instalação depois)</option>
+                  {admin.devices.map((device) => (
+                    <option key={device.id} value={device.id}>
+                      Já instalado: {device.imei} {device.model ? `· ${device.model}` : ''}
+                    </option>
+                  ))}
+                </SelectField>
+                <div className={pageStyles.formRow}>
+                  <TextField
+                    label={`${c.equipmentName} (R$)`}
+                    inputMode="decimal"
+                    hint="0 se o cliente já tem o aparelho."
+                    value={adminDraft.equipment}
+                    onChange={(e) => setAdminDraft({ ...adminDraft, equipment: e.target.value })}
+                  />
+                  <TextField
+                    label="Vencimento da fatura"
+                    type="date"
+                    value={adminDraft.dueDate}
+                    onChange={(e) => setAdminDraft({ ...adminDraft, dueDate: e.target.value })}
+                  />
+                </div>
+                {!installedDevice &&
+                  (address ? (
+                    <DeliveryBox address={address} />
+                  ) : (
+                    <div className={`${styles.delivery} ${styles.deliveryEmpty}`}>
+                      <div className={styles.deliveryText}>
+                        <span className={styles.deliveryLabel}>Entrega do rastreador</span>
+                        <span>
+                          O cliente não tem endereço de entrega. Tudo bem se o aparelho for entregue em
+                          mãos; para enviar, cadastre o endereço na ficha antes.
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                <p className={styles.muted}>A instalação é paga direto ao prestador e não entra na fatura.</p>
+              </>
+            )}
+
+            {step === 1 && !admin && (
+              <>
+                {editingAddress ? (
+                  <>
+                    <p className={pageStyles.description}>
+                      {address ? 'Para onde enviamos o rastreador agora?' : 'Para onde enviamos o rastreador?'}
+                    </p>
+                    <AddressFields value={addressDraft ?? EMPTY_ADDRESS} onChange={setAddressDraft} autoFocus />
+                    {address && (
+                      <Button size="small" variant="ghost" onClick={() => setAddressDraft(null)}>
+                        Manter o endereço atual
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  address && <DeliveryBox address={address} onChange={() => setAddressDraft(address)} />
+                )}
+                <div className={styles.orderSummary}>
+                  <div className={`${styles.orderLine} ${styles.orderTotal}`}>
+                    <span>
+                      {c.equipmentName} (vence em {c.setupDueDays} {c.setupDueDays === 1 ? 'dia' : 'dias'})
+                    </span>
+                    <span>{formatMoney(c.equipmentPriceCents)}</span>
+                  </div>
+                </div>
+                <div className={styles.installNote}>
+                  <span>
+                    <strong>Instalação:</strong> é feita por um prestador parceiro e paga direto a ele —
+                    não entra na fatura.
+                  </span>
+                  <Button size="small" variant="secondary" onClick={() => setShowInstallers(true)}>
+                    Ver prestadores
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {step === 2 && (
+              <>
+                {admin && adminDraft ? (
+                  <SubscriptionFields
+                    draft={adminDraft.plan}
+                    onChange={(plan) => setAdminDraft({ ...adminDraft, plan })}
+                  />
+                ) : (
+                  <p className={pageStyles.description}>
+                    A assinatura começa com o pedido. É o mesmo plano que você já paga (ou o padrão, no
+                    primeiro veículo).
+                  </p>
+                )}
+
+                <div className={styles.orderSummary}>
+                  <div className={styles.orderLine}>
+                    <span>Veículo</span>
+                    <span>{[vehicle.name, vehicle.plate].filter(Boolean).join(' · ')}</span>
+                  </div>
+                  <div className={styles.orderLine}>
+                    <span>Rastreador</span>
+                    <span>
+                      {installedDevice
+                        ? 'já instalado'
+                        : address
+                          ? `entrega em ${address.city}/${address.state}`
+                          : 'entrega em mãos'}
+                    </span>
+                  </div>
+                  <div className={`${styles.orderLine} ${styles.orderTotal}`}>
+                    <span>
+                      Agora: equipamento
+                      {isAdmin && adminDraft && equipmentCents ? ` · vence ${formatDateOnly(adminDraft.dueDate)}` : ''}
+                    </span>
+                    <span>{equipmentCents ? formatMoney(equipmentCents) : 'sem cobrança'}</span>
+                  </div>
+                  {monthly && (
+                    <div className={`${styles.orderLine} ${styles.orderMonthly}`}>
+                      <span>
+                        Assinatura: {monthly.name || 'plano'}, todo dia {monthly.dueDay}
+                      </span>
+                      <span>{monthly.cents !== null ? `${formatMoney(monthly.cents)}/mês` : '—'}</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      <InstallersModal isOpen={showInstallers} onClose={() => setShowInstallers(false)} />
+    </>
+  );
+}

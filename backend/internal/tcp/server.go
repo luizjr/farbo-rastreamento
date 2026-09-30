@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/farbo/tracker-platform/backend/internal/config"
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
-	"github.com/farbo/tracker-platform/backend/internal/telemetry"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/config"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/telemetry"
 )
 
 // ErrRejectSession sinaliza que a sessão deve ser encerrada (ex.: IMEI
@@ -42,6 +42,10 @@ type Server struct {
 
 	// sem limita o número de sessões simultâneas.
 	sem chan struct{}
+
+	// pending conta, por IP, as conexões que ainda não se identificaram.
+	pendingMu sync.Mutex
+	pending   map[string]int
 }
 
 func NewServer(
@@ -60,7 +64,38 @@ func NewServer(
 		log:      log.With("component", "tcp"),
 		metrics:  metrics,
 		sem:      make(chan struct{}, cfg.MaxConnections),
+		pending:  map[string]int{},
 	}
+}
+
+// admitPending reserva uma vaga de conexão não identificada para o IP.
+func (s *Server) admitPending(ip string) bool {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	if s.cfg.MaxPendingPerIP > 0 && s.pending[ip] >= s.cfg.MaxPendingPerIP {
+		return false
+	}
+	s.pending[ip]++
+	return true
+}
+
+// releasePending devolve a vaga (identificou-se ou desconectou).
+func (s *Server) releasePending(ip string) {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	if s.pending[ip] <= 1 {
+		delete(s.pending, ip)
+		return
+	}
+	s.pending[ip]--
+}
+
+func remoteIP(conn net.Conn) string {
+	host, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+	if err != nil {
+		return conn.RemoteAddr().String()
+	}
+	return host
 }
 
 func (s *Server) Addr() string {
@@ -107,6 +142,13 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 			_ = conn.Close()
 			continue
 		}
+		ip := remoteIP(conn)
+		if !s.admitPending(ip) {
+			<-s.sem
+			s.log.Debug("muitas conexões não identificadas do mesmo IP, recusando", "remote", ip)
+			_ = conn.Close()
+			continue
+		}
 
 		s.wg.Add(1)
 		go func() {
@@ -114,12 +156,12 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 				<-s.sem
 				s.wg.Done()
 			}()
-			s.handle(ctx, conn)
+			s.handle(ctx, conn, ip)
 		}()
 	}
 }
 
-func (s *Server) handle(ctx context.Context, netConn net.Conn) {
+func (s *Server) handle(ctx context.Context, netConn net.Conn, ip string) {
 	conn := newConnection(netConn, s.cfg.WriteTimeout)
 
 	defer func() {
@@ -142,7 +184,13 @@ func (s *Server) handle(ctx context.Context, netConn net.Conn) {
 	sess := &session{
 		server: s,
 		conn:   conn,
+		ip:     ip,
 		log:    s.log.With("remote", conn.RemoteAddr(), "session", conn.ID.String()),
 	}
+	defer func() {
+		if !sess.registered {
+			s.releasePending(ip)
+		}
+	}()
 	sess.run(ctx)
 }

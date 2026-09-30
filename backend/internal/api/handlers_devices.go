@@ -4,8 +4,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/farbo/tracker-platform/backend/internal/audit"
-	"github.com/farbo/tracker-platform/backend/internal/devices"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/audit"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/devices"
 )
 
 func (s *Server) handleListDevices(w http.ResponseWriter, r *http.Request) {

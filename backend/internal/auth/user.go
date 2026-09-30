@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/farbo/tracker-platform/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
 )
 
 // Perfis de acesso (RBAC, §27).
@@ -16,11 +16,14 @@ const (
 	RoleAdmin    = "admin"    // tudo, inclusive cadastro e usuários
 	RoleOperator = "operator" // opera o painel e envia comandos
 	RoleViewer   = "viewer"   // somente leitura
+	// RoleCustomer é o cliente final: enxerga apenas os próprios veículos e
+	// faturas. Os outros três perfis são a equipe da central.
+	RoleCustomer = "customer"
 )
 
 func ValidRole(role string) bool {
 	switch role {
-	case RoleAdmin, RoleOperator, RoleViewer:
+	case RoleAdmin, RoleOperator, RoleViewer, RoleCustomer:
 		return true
 	}
 	return false
@@ -32,6 +35,10 @@ type User struct {
 	Name  string    `json:"name"`
 	Role  string    `json:"role"`
 
+	// Contato e documento (CPF/CNPJ) do cliente; vazios para a equipe.
+	Phone    string `json:"phone"`
+	Document string `json:"document"`
+
 	// PasswordHash nunca sai em JSON.
 	PasswordHash string `json:"-"`
 
@@ -40,7 +47,7 @@ type User struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-const userColumns = `id, email, name, role, password_hash, active, created_at, updated_at`
+const userColumns = `id, email, name, role, phone, document, password_hash, active, created_at, updated_at`
 
 type Repository struct{ db *database.DB }
 
@@ -48,7 +55,7 @@ func NewRepository(db *database.DB) *Repository { return &Repository{db: db} }
 
 func scanUser(row database.Scanner) (*User, error) {
 	var u User
-	err := row.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.PasswordHash,
+	err := row.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Phone, &u.Document, &u.PasswordHash,
 		&u.Active, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		return nil, database.MapError(err)
@@ -58,10 +65,10 @@ func scanUser(row database.Scanner) (*User, error) {
 
 func (r *Repository) Create(ctx context.Context, u *User) error {
 	return database.MapError(r.db.QueryRow(ctx, `
-		INSERT INTO users (email, name, role, password_hash)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO users (email, name, role, phone, document, password_hash)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, created_at, updated_at`,
-		strings.TrimSpace(u.Email), u.Name, u.Role, u.PasswordHash,
+		strings.TrimSpace(u.Email), u.Name, u.Role, u.Phone, u.Document, u.PasswordHash,
 	).Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt))
 }
 
@@ -90,6 +97,24 @@ func (r *Repository) List(ctx context.Context) ([]*User, error) {
 		out = append(out, u)
 	}
 	return out, rows.Err()
+}
+
+// UpdateProfile altera nome, contato e situação. Desativar também encerra
+// as sessões abertas, para o acesso cair na hora e não só no próximo login.
+func (r *Repository) UpdateProfile(ctx context.Context, id uuid.UUID, p Profile) (*User, error) {
+	user, err := scanUser(r.db.QueryRow(ctx, `
+		UPDATE users SET name = $2, phone = $3, document = $4, active = $5, updated_at = NOW()
+		WHERE id = $1
+		RETURNING `+userColumns, id, p.Name, p.Phone, p.Document, p.Active))
+	if err != nil {
+		return nil, err
+	}
+	if !user.Active {
+		if err := r.RevokeAllForUser(ctx, id); err != nil {
+			return nil, err
+		}
+	}
+	return user, nil
 }
 
 func (r *Repository) Count(ctx context.Context) (int, error) {

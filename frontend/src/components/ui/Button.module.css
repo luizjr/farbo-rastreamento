@@ -6,13 +6,15 @@
   padding: 0 var(--space-4);
   height: 36px;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-full);
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
   transition:
     background var(--transition-fast),
     border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    color var(--transition-fast),
     opacity var(--transition-fast);
 }
 
@@ -23,11 +25,14 @@
 
 .primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
+  font-weight: 700;
+  box-shadow: 0 0 14px var(--accent-glow);
 }
 
 .primary:hover:not(:disabled) {
   background: var(--accent-strong);
+  box-shadow: 0 0 22px var(--accent-glow);
 }
 
 .secondary {
@@ -38,6 +43,8 @@
 
 .secondary:hover:not(:disabled) {
   background: var(--surface-hover);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .danger {

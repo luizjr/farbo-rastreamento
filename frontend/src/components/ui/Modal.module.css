@@ -6,7 +6,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-4);
-  background: rgba(3, 6, 10, 0.72);
+  background: rgba(4, 7, 5, 0.78);
   backdrop-filter: blur(2px);
   animation: fade var(--transition-base);
 }
@@ -18,7 +18,7 @@
   overflow-y: auto;
   background: var(--surface-overlay);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
   animation: rise var(--transition-base);
 }

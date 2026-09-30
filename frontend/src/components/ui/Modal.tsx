@@ -17,15 +17,25 @@ interface ModalProps {
 export function Modal({ open, title, icon, wide = false, onClose, footer, children }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
+  // Quem usa o Modal passa onClose como função nova a cada render. Se ela
+  // entrasse nas dependências do efeito, cada tecla digitada num campo do
+  // diálogo reexecutaria o efeito e devolveria o foco ao diálogo, engolindo o
+  // resto do texto. Por isso ela fica numa ref e o efeito só roda ao abrir.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   // Esc fecha; o foco vai para o diálogo para quem navega pelo teclado.
   useEffect(() => {
     if (!open) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     };
     document.addEventListener('keydown', onKeyDown);
-    dialogRef.current?.focus();
+    // Um campo com autoFocus dentro do diálogo já tem o foco: não tira dele.
+    if (!dialogRef.current?.contains(document.activeElement)) {
+      dialogRef.current?.focus();
+    }
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -34,7 +44,7 @@ export function Modal({ open, title, icon, wide = false, onClose, footer, childr
       document.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = previousOverflow;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

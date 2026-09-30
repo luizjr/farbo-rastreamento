@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/farbo/tracker-platform/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
 )
 
 type Vehicle struct {
@@ -26,6 +26,13 @@ type Vehicle struct {
 
 	DeviceID *uuid.UUID `json:"deviceId"`
 
+	// OwnerID é o cliente dono do veículo; nulo é veículo da central.
+	OwnerID *uuid.UUID `json:"ownerId"`
+
+	// HistoryRetentionDays é a exceção do veículo (7, 14 ou 30 dias); nulo
+	// segue o cliente (ver o pacote retention).
+	HistoryRetentionDays *int `json:"historyRetentionDays"`
+
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -39,10 +46,13 @@ type Input struct {
 	Color         string     `json:"color"`
 	SpeedLimitKmh *float64   `json:"speedLimitKmh"`
 	DeviceID      *uuid.UUID `json:"deviceId"`
+	// OwnerID só é lido na criação feita pela central; a edição não troca o
+	// dono de um veículo.
+	OwnerID *uuid.UUID `json:"ownerId"`
 }
 
 const columns = `id, name, COALESCE(plate, ''), COALESCE(brand, ''), COALESCE(model, ''), year,
-	COALESCE(color, ''), speed_limit_kmh, device_id, created_at, updated_at`
+	COALESCE(color, ''), speed_limit_kmh, device_id, owner_id, history_retention_days, created_at, updated_at`
 
 type Repository struct{ db *database.DB }
 
@@ -51,20 +61,42 @@ func NewRepository(db *database.DB) *Repository { return &Repository{db: db} }
 func scan(row database.Scanner) (*Vehicle, error) {
 	var v Vehicle
 	err := row.Scan(&v.ID, &v.Name, &v.Plate, &v.Brand, &v.Model, &v.Year, &v.Color,
-		&v.SpeedLimitKmh, &v.DeviceID, &v.CreatedAt, &v.UpdatedAt)
+		&v.SpeedLimitKmh, &v.DeviceID, &v.OwnerID, &v.HistoryRetentionDays, &v.CreatedAt, &v.UpdatedAt)
 	if err != nil {
 		return nil, database.MapError(err)
 	}
 	return &v, nil
 }
 
+const insertVehicle = `
+	INSERT INTO vehicles (name, plate, brand, model, year, color, speed_limit_kmh, device_id, owner_id)
+	VALUES ($1, NULLIF($2, ''), $3, $4, $5, $6, $7, $8, $9)
+	RETURNING ` + columns
+
+func insertArgs(in Input) []any {
+	return []any{in.Name, strings.ToUpper(strings.TrimSpace(in.Plate)), in.Brand, in.Model,
+		in.Year, in.Color, in.SpeedLimitKmh, in.DeviceID, in.OwnerID}
+}
+
 func (r *Repository) Create(ctx context.Context, in Input) (*Vehicle, error) {
-	return scan(r.db.QueryRow(ctx, `
-		INSERT INTO vehicles (name, plate, brand, model, year, color, speed_limit_kmh, device_id)
-		VALUES ($1, NULLIF($2, ''), $3, $4, $5, $6, $7, $8)
-		RETURNING `+columns,
-		in.Name, strings.ToUpper(strings.TrimSpace(in.Plate)), in.Brand, in.Model,
-		in.Year, in.Color, in.SpeedLimitKmh, in.DeviceID))
+	return InsertWith(ctx, r.db, in)
+}
+
+// InsertWith grava o veículo pelo Querier informado (pool ou transação). Não
+// valida: quem chama usa Validate antes.
+func InsertWith(ctx context.Context, q database.Querier, in Input) (*Vehicle, error) {
+	return scan(q.QueryRow(ctx, insertVehicle, insertArgs(in)...))
+}
+
+// CountAwaitingInstall conta os veículos do cliente ainda não instalados: sem
+// aparelho, ou com um aparelho que nunca deu sinal.
+func (r *Repository) CountAwaitingInstall(ctx context.Context, ownerID uuid.UUID) (int, error) {
+	var n int
+	err := r.db.QueryRow(ctx,
+		`SELECT count(*) FROM vehicles v
+		 LEFT JOIN devices d ON d.id = v.device_id
+		 WHERE v.owner_id = $1 AND d.last_seen_at IS NULL`, ownerID).Scan(&n)
+	return n, database.MapError(err)
 }
 
 func (r *Repository) Update(ctx context.Context, id uuid.UUID, in Input) (*Vehicle, error) {
@@ -97,7 +129,16 @@ func (r *Repository) GetByDeviceID(ctx context.Context, deviceID uuid.UUID) (*Ve
 }
 
 func (r *Repository) List(ctx context.Context) ([]*Vehicle, error) {
-	rows, err := r.db.Query(ctx, `SELECT `+columns+` FROM vehicles ORDER BY name`)
+	return r.list(ctx, `SELECT `+columns+` FROM vehicles ORDER BY name`)
+}
+
+// ListByOwner devolve só os veículos de um cliente.
+func (r *Repository) ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]*Vehicle, error) {
+	return r.list(ctx, `SELECT `+columns+` FROM vehicles WHERE owner_id = $1 ORDER BY name`, ownerID)
+}
+
+func (r *Repository) list(ctx context.Context, query string, args ...any) ([]*Vehicle, error) {
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, database.MapError(err)
 	}
@@ -120,6 +161,10 @@ func NewService(repo *Repository) *Service { return &Service{repo: repo} }
 
 func (s *Service) List(ctx context.Context) ([]*Vehicle, error) { return s.repo.List(ctx) }
 
+func (s *Service) ListByOwner(ctx context.Context, ownerID uuid.UUID) ([]*Vehicle, error) {
+	return s.repo.ListByOwner(ctx, ownerID)
+}
+
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (*Vehicle, error) {
 	return s.repo.GetByID(ctx, id)
 }
@@ -129,14 +174,14 @@ func (s *Service) GetByDeviceID(ctx context.Context, deviceID uuid.UUID) (*Vehic
 }
 
 func (s *Service) Create(ctx context.Context, in Input) (*Vehicle, error) {
-	if err := validate(in); err != nil {
+	if err := Validate(in); err != nil {
 		return nil, err
 	}
 	return s.repo.Create(ctx, in)
 }
 
 func (s *Service) Update(ctx context.Context, id uuid.UUID, in Input) (*Vehicle, error) {
-	if err := validate(in); err != nil {
+	if err := Validate(in); err != nil {
 		return nil, err
 	}
 	return s.repo.Update(ctx, id, in)
@@ -149,7 +194,14 @@ type ValidationError struct{ Message string }
 
 func (e ValidationError) Error() string { return e.Message }
 
-func validate(in Input) error {
+// CountAwaitingInstall conta os veículos do cliente ainda não instalados: sem
+// aparelho, ou com um aparelho que nunca deu sinal.
+func (s *Service) CountAwaitingInstall(ctx context.Context, ownerID uuid.UUID) (int, error) {
+	return s.repo.CountAwaitingInstall(ctx, ownerID)
+}
+
+// Validate confere os dados do veículo antes de gravar.
+func Validate(in Input) error {
 	if strings.TrimSpace(in.Name) == "" {
 		return ValidationError{Message: "o nome do veículo é obrigatório"}
 	}

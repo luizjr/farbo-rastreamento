@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/farbo/tracker-platform/backend/internal/database"
-	"github.com/farbo/tracker-platform/backend/internal/events"
-	"github.com/farbo/tracker-platform/backend/internal/tracking"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/events"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/tracking"
 )
 
 // handleVehiclePosition devolve a última posição conhecida do veículo.
@@ -42,7 +42,7 @@ func (s *Server) handleVehiclePosition(w http.ResponseWriter, r *http.Request) {
 // Nunca devolve tudo: acima do limite o banco amostra uniformemente e a
 // resposta diz explicitamente que veio amostrada.
 func (s *Server) handleVehiclePositions(w http.ResponseWriter, r *http.Request) {
-	_, device, ok := s.vehicleFromURL(w, r, true)
+	vehicle, device, ok := s.vehicleFromURL(w, r, true)
 	if !ok {
 		return
 	}
@@ -57,6 +57,7 @@ func (s *Server) handleVehiclePositions(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	from = s.clampToRetention(r.Context(), vehicle, from)
 	if !from.Before(to) {
 		writeError(w, http.StatusBadRequest, "o início do período precisa ser anterior ao fim")
 		return
@@ -112,7 +113,7 @@ func (s *Server) handleVehiclePositions(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleVehicleEvents(w http.ResponseWriter, r *http.Request) {
-	_, device, ok := s.vehicleFromURL(w, r, true)
+	vehicle, device, ok := s.vehicleFromURL(w, r, true)
 	if !ok {
 		return
 	}
@@ -127,6 +128,7 @@ func (s *Server) handleVehicleEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	from = s.clampToRetention(r.Context(), vehicle, from)
 
 	var types []string
 	if raw := r.URL.Query()["type"]; len(raw) > 0 {

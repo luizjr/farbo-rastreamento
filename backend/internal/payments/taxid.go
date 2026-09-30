@@ -1,0 +1,74 @@
+package payments
+
+import "strings"
+
+// onlyDigits tira pontos, traços, barras e espaços.
+func onlyDigits(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// validTaxID aceita CPF ou CNPJ com os dígitos verificadores corretos. A
+// AbacatePay recusa o Pix inteiro se o documento do pagador for inválido.
+func validTaxID(doc string) bool {
+	d := onlyDigits(doc)
+	switch len(d) {
+	case 11:
+		return validCPF(d)
+	case 14:
+		return validCNPJ(d)
+	}
+	return false
+}
+
+func allSame(d string) bool {
+	return strings.Count(d, d[:1]) == len(d)
+}
+
+func validCPF(d string) bool {
+	if allSame(d) {
+		return false
+	}
+	for _, size := range []int{9, 10} {
+		sum := 0
+		for i := 0; i < size; i++ {
+			sum += int(d[i]-'0') * (size + 1 - i)
+		}
+		check := (sum * 10) % 11
+		if check == 10 {
+			check = 0
+		}
+		if check != int(d[size]-'0') {
+			return false
+		}
+	}
+	return true
+}
+
+func validCNPJ(d string) bool {
+	if allSame(d) {
+		return false
+	}
+	weights := []int{6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2}
+	for _, size := range []int{12, 13} {
+		sum := 0
+		for i := 0; i < size; i++ {
+			sum += int(d[i]-'0') * weights[len(weights)-size+i]
+		}
+		check := sum % 11
+		if check < 2 {
+			check = 0
+		} else {
+			check = 11 - check
+		}
+		if check != int(d[size]-'0') {
+			return false
+		}
+	}
+	return true
+}

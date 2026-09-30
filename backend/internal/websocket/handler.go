@@ -21,6 +21,10 @@ const (
 type Handler struct {
 	hub            *Hub
 	allowedOrigins []string
+
+	// Scope, quando definido, devolve o filtro de mensagens de quem está
+	// conectando (ver Filter). É preenchido pela API, que conhece o usuário.
+	Scope func(r *http.Request) Filter
 }
 
 func NewHandler(hub *Hub, allowedOrigins []string) *Handler {
@@ -50,6 +54,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c := &client{send: make(chan []byte, sendBuffer), id: uuid.New()}
+	if h.Scope != nil {
+		c.filter = h.Scope(r)
+	}
 	h.hub.add(c)
 
 	go h.writePump(conn, c)

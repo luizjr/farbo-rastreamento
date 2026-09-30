@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/farbo/tracker-platform/backend/internal/config"
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
-	"github.com/farbo/tracker-platform/backend/internal/protocols/gt06"
-	"github.com/farbo/tracker-platform/backend/internal/telemetry"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/config"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols/gt06"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/telemetry"
 )
 
 const testIMEI = "869247061234567"
@@ -119,6 +119,8 @@ func startServer(t *testing.T, ingestor Ingestor, tune func(*config.TCP)) (strin
 		WriteTimeout:   2 * time.Second,
 		MaxConnections: 10,
 		KeepAlive:      30 * time.Second,
+
+		IdentifyTimeout: 5 * time.Second,
 	}
 	if tune != nil {
 		tune(&cfg)
@@ -442,4 +444,62 @@ func newFakeConn() net.Conn {
 	client, server := net.Pipe()
 	go func() { _, _ = io.Copy(io.Discard, server) }()
 	return fakeConn{client}
+}
+
+// Quem abre o socket e não manda o login é derrubado no prazo curto, sem
+// ocupar a vaga pelo tempo inteiro de um rastreador.
+func TestServerDropsUnidentifiedConnection(t *testing.T) {
+	addr, _ := startServer(t, &fakeIngestor{}, func(c *config.TCP) { c.IdentifyTimeout = 300 * time.Millisecond })
+	conn := dial(t, addr)
+	start := time.Now()
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	if _, err := conn.Read(make([]byte, 16)); err == nil {
+		t.Fatal("esperava a conexão fechada pelo servidor")
+	}
+	if waited := time.Since(start); waited > 2*time.Second {
+		t.Fatalf("derrubou só em %s; o prazo de identificação é 300ms", waited)
+	}
+}
+
+// Identificado, o rastreador passa a ter o prazo normal (não cai no curto).
+func TestServerKeepsIdentifiedConnection(t *testing.T) {
+	ingestor := &fakeIngestor{}
+	addr, _ := startServer(t, ingestor, func(c *config.TCP) { c.IdentifyTimeout = 300 * time.Millisecond })
+	conn := dial(t, addr)
+	if _, err := conn.Write(loginFrame(t, 1)); err != nil {
+		t.Fatal(err)
+	}
+	ingestor.waitForMessages(t, 1)
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, _ = conn.Read(make([]byte, 64)) // ACK do login
+	_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+	_, err := conn.Read(make([]byte, 16))
+	if ne, ok := err.(net.Error); !ok || !ne.Timeout() {
+		t.Fatalf("a conexão identificada devia continuar aberta, veio %v", err)
+	}
+}
+
+// Um mesmo IP não segura mais que MaxPendingPerIP conexões sem login.
+func TestServerLimitsPendingPerIP(t *testing.T) {
+	addr, _ := startServer(t, &fakeIngestor{}, func(c *config.TCP) { c.MaxPendingPerIP = 2 })
+	first, second := dial(t, addr), dial(t, addr)
+	defer first.Close()
+	defer second.Close()
+	third := dial(t, addr)
+	_ = third.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, err := third.Read(make([]byte, 16)); err == nil {
+		t.Fatal("a terceira conexão sem login do mesmo IP devia ser recusada")
+	} else if ne, ok := err.(net.Error); ok && ne.Timeout() {
+		t.Fatal("a terceira conexão continuou aberta")
+	}
+	// Liberou uma vaga: volta a aceitar.
+	first.Close()
+	time.Sleep(200 * time.Millisecond)
+	fourth := dial(t, addr)
+	defer fourth.Close()
+	_ = fourth.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	_, err := fourth.Read(make([]byte, 16))
+	if ne, ok := err.(net.Error); !ok || !ne.Timeout() {
+		t.Fatalf("com vaga livre a conexão devia ser aceita, veio %v", err)
+	}
 }

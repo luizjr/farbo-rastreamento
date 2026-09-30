@@ -6,7 +6,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/farbo/tracker-platform/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
 )
 
 // NÍVEL DE CONFIANÇA: UNKNOWN

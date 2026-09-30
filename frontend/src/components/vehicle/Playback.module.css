@@ -21,7 +21,8 @@
   align-items: center;
   justify-content: center;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
+  box-shadow: 0 0 14px var(--accent-glow);
   border: none;
   border-radius: var(--radius-full);
   font-size: 14px;

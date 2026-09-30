@@ -7,7 +7,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/farbo/tracker-platform/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
 )
 
 // RawPacket é tráfego que não pôde ser interpretado. Guardar isso é o que

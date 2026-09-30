@@ -3,8 +3,10 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +23,11 @@ type Config struct {
 	Commands  Commands
 	Telemetry Telemetry
 	Bootstrap Bootstrap
+	Mail      Mail
+	Billing   Billing
+	Payments  Payments
+	Catalog   Catalog
+	Shipping  Shipping
 }
 
 type HTTP struct {
@@ -31,6 +38,11 @@ type HTTP struct {
 	CORSOrigins     []string
 	RateLimitRPS    float64
 	RateLimitBurst  int
+	// TrustedProxies são os proxies (nginx do painel, balanceador) de quem
+	// se aceita o X-Forwarded-For. De qualquer outro endereço o cabeçalho é
+	// ignorado — senão o cliente inventa o próprio IP e burla o limite de
+	// tentativas de login.
+	TrustedProxies []netip.Prefix
 }
 
 type TCP struct {
@@ -45,6 +57,14 @@ type TCP struct {
 	MaxConnections int
 	// KeepAlive do socket TCP.
 	KeepAlive time.Duration
+	// IdentifyTimeout é o prazo para uma conexão nova mandar o login (IMEI).
+	// Rastreador de verdade manda no primeiro pacote; quem só abre o socket
+	// e fica parado é derrubado, em vez de ocupar a vaga por ReadTimeout.
+	IdentifyTimeout time.Duration
+	// MaxPendingPerIP limita as conexões ainda não identificadas de um mesmo
+	// IP (0 desliga). Folgado de propósito: chips M2M saem por NAT da
+	// operadora, com muitos rastreadores atrás de um IP.
+	MaxPendingPerIP int
 }
 
 type Postgres struct {
@@ -55,6 +75,14 @@ type Postgres struct {
 	Password string
 	SSLMode  string
 	MaxConns int32
+	// TelemetryMaxConns é o pool separado das gravações dos rastreadores
+	// (posição, estado, último contato).
+	TelemetryMaxConns int32
+	// TelemetrySyncCommit: com false (padrão) essas gravações não esperam o
+	// fsync do disco — no pior caso, uma queda do PostgreSQL perde menos de
+	// 1 s de posições. É o que deixa a ingestão independente da velocidade
+	// do disco. Faturas, pagamentos e cadastros seguem síncronos.
+	TelemetrySyncCommit bool
 }
 
 func (p Postgres) DSN() string {
@@ -85,6 +113,11 @@ type Auth struct {
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
 	BcryptCost      int
+	// PasswordResetTTL é a validade do link de redefinição de senha.
+	PasswordResetTTL time.Duration
+	// InviteTTL é a validade do link de boas-vindas mandado ao cliente novo
+	// para ele criar a senha.
+	InviteTTL time.Duration
 }
 
 type Tracking struct {
@@ -102,6 +135,16 @@ type Tracking struct {
 	DefaultSpeedLimitKmh float64
 	// OverspeedHysteresisKmh evita oscilação do estado de excesso (§21).
 	OverspeedHysteresisKmh float64
+	// HistoryRetentionDays é o padrão da central para guardar posições e
+	// eventos (7, 14 ou 30); cliente e veículo podem ter o próprio.
+	HistoryRetentionDays int
+	// HistoryCleanupInterval é de quanto em quanto tempo o histórico vencido
+	// é apagado.
+	HistoryCleanupInterval time.Duration
+	// StoreRawPayload guarda o pacote bruto em cada posição. Desligado por
+	// padrão: custa ~25% do disco das posições; ligue só para investigar um
+	// modelo novo (pacotes com problema já vão para raw_packets).
+	StoreRawPayload bool
 }
 
 type Commands struct {
@@ -130,6 +173,169 @@ type Bootstrap struct {
 	AdminName     string
 }
 
+// Modos de TLS aceitos em SMTP_TLS.
+const (
+	SMTPStartTLS = "starttls" // porta 587: conexão sobe para TLS com STARTTLS
+	SMTPTLS      = "tls"      // porta 465: TLS desde o primeiro byte
+	SMTPNoTLS    = "none"     // só para servidor local de testes (ex.: Mailpit)
+)
+
+type Mail struct {
+	// AppURL é o endereço público do painel; os links dos e-mails apontam
+	// para ele.
+	AppURL string
+	// From é o remetente, ex.: "Farbo Rastreadores <nao-responda@exemplo.com>".
+	From string
+
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword string
+	SMTPTLS      string
+}
+
+type Billing struct {
+	// InvoiceLeadDays: a fatura é gerada esta quantidade de dias antes do
+	// vencimento, para o cliente ver e pagar com antecedência.
+	InvoiceLeadDays int
+	// SuspendAfterDays: com fatura vencida há mais que isso, o cliente perde o
+	// acesso ao mapa e aos veículos até pagar. 0 desliga a suspensão.
+	SuspendAfterDays int
+	// Timezone define o "hoje" dos vencimentos.
+	Timezone string
+}
+
+// Catalog é a tabela de preços usada quando o próprio cliente contrata um
+// rastreador (ele não escolhe preço). Os padrões são os da landing page. A
+// central pode ajustar os valores caso a caso. A instalação não entra: ela é
+// paga direto ao prestador (ver o pacote installers).
+type Catalog struct {
+	PlanName            string
+	PlanPriceCents      int
+	DefaultDueDay       int
+	EquipmentName       string
+	EquipmentPriceCents int
+	// SetupDueDays: prazo da fatura do equipamento.
+	SetupDueDays int
+}
+
+func (c Catalog) validate() error {
+	for name, value := range map[string]int{
+		"CATALOG_PLAN_PRICE_CENTS": c.PlanPriceCents, "CATALOG_EQUIPMENT_PRICE_CENTS": c.EquipmentPriceCents,
+	} {
+		if value < 0 || value > 100_000_00 {
+			return fmt.Errorf("%s fora da faixa (0..10000000 centavos)", name)
+		}
+	}
+	if c.DefaultDueDay < 1 || c.DefaultDueDay > 28 {
+		return fmt.Errorf("CATALOG_DEFAULT_DUE_DAY fora da faixa (1..28)")
+	}
+	if c.SetupDueDays < 0 || c.SetupDueDays > 30 {
+		return fmt.Errorf("CATALOG_SETUP_DUE_DAYS fora da faixa (0..30)")
+	}
+	if strings.TrimSpace(c.PlanName) == "" || strings.TrimSpace(c.EquipmentName) == "" {
+		return fmt.Errorf("CATALOG_PLAN_NAME e CATALOG_EQUIPMENT_NAME não podem ficar vazios")
+	}
+	return nil
+}
+
+// Payments configura o pagamento online das faturas (AbacatePay).
+type Payments struct {
+	// AbacatePayAPIKey liga o Pix. Chave abc_dev_... opera em modo de testes.
+	AbacatePayAPIKey  string
+	AbacatePayBaseURL string
+	// WebhookSecret é o valor que a AbacatePay manda em ?webhookSecret= em
+	// cada notificação. Vazio recusa todos os webhooks.
+	WebhookSecret string
+	// WebhookPublicKey assina os webhooks (HMAC); o padrão é a chave pública
+	// publicada pela AbacatePay.
+	WebhookPublicKey string
+	// PixExpiresIn é a validade de cada Pix gerado.
+	PixExpiresIn time.Duration
+}
+
+func (p Payments) Enabled() bool { return p.AbacatePayAPIKey != "" }
+
+// Shipping configura o envio do rastreador pelo Melhor Envios: etiqueta
+// comprada pelo sistema e rastreio até a casa do cliente.
+type Shipping struct {
+	Sandbox bool
+	// BaseURL sobrescreve o endereço da API (testes); vazio usa sandbox ou
+	// produção conforme Sandbox.
+	BaseURL string
+	// ClientID e ClientSecret são do aplicativo criado em Integrações > Área
+	// Dev. O Secret também assina os webhooks.
+	ClientID     string
+	ClientSecret string
+	// Token pessoal opcional; com ele não é preciso "Conectar" pelo painel.
+	Token string
+	// RedirectURL é o callback cadastrado no aplicativo; o padrão é
+	// APP_URL + /api/integrations/melhorenvio/callback.
+	RedirectURL string
+	// ContactEmail vai no User-Agent, exigido pela API.
+	ContactEmail string
+	// From é o remetente (a base da central).
+	From ShippingAddress
+	// Pacote de um rastreador.
+	WeightKg float64
+	HeightCm int
+	WidthCm  int
+	LengthCm int
+	// InsuranceCents é o valor declarado (seguro); o padrão é o do equipamento.
+	InsuranceCents int
+	// NonCommercial envia com declaração de conteúdo em vez de nota fiscal.
+	NonCommercial bool
+	// Services filtra os serviços cotados (ex.: "1,2" = PAC e SEDEX); vazio
+	// cota todos.
+	Services string
+	// SyncInterval é de quanto em quanto tempo o rastreio é consultado.
+	SyncInterval time.Duration
+}
+
+// ShippingAddress é o remetente das etiquetas.
+type ShippingAddress struct {
+	Name            string
+	Phone           string
+	Email           string
+	Document        string
+	CompanyDocument string
+	StateRegister   string
+	PostalCode      string
+	Address         string
+	Number          string
+	Complement      string
+	District        string
+	City            string
+	State           string
+}
+
+// Enabled diz se há credencial do Melhor Envios.
+func (s Shipping) Enabled() bool { return s.Token != "" || (s.ClientID != "" && s.ClientSecret != "") }
+
+// MissingOrigin lista o que falta no remetente para comprar etiqueta.
+func (s Shipping) MissingOrigin() []string {
+	missing := []string{}
+	for env, value := range map[string]string{
+		"MELHORENVIO_FROM_NAME": s.From.Name, "MELHORENVIO_FROM_PHONE": s.From.Phone,
+		"MELHORENVIO_FROM_POSTAL_CODE": s.From.PostalCode, "MELHORENVIO_FROM_ADDRESS": s.From.Address,
+		"MELHORENVIO_FROM_NUMBER": s.From.Number, "MELHORENVIO_FROM_DISTRICT": s.From.District,
+		"MELHORENVIO_FROM_CITY": s.From.City, "MELHORENVIO_FROM_STATE": s.From.State,
+	} {
+		if strings.TrimSpace(value) == "" {
+			missing = append(missing, env)
+		}
+	}
+	if s.From.Document == "" && s.From.CompanyDocument == "" {
+		missing = append(missing, "MELHORENVIO_FROM_DOCUMENT ou MELHORENVIO_FROM_COMPANY_DOCUMENT")
+	}
+	sort.Strings(missing)
+	return missing
+}
+
+// Enabled diz se há servidor SMTP configurado. Sem ele os e-mails só vão
+// para o log.
+func (m Mail) Enabled() bool { return m.SMTPHost != "" }
+
 func Load() (*Config, error) {
 	cfg := &Config{
 		Env: str("APP_ENV", "development"),
@@ -143,12 +349,14 @@ func Load() (*Config, error) {
 			RateLimitBurst:  num("RATE_LIMIT_BURST", 40),
 		},
 		TCP: TCP{
-			Port:           num("TCP_PORT", 5000),
-			MaxPacketSize:  num("TCP_MAX_PACKET_SIZE", 8192),
-			ReadTimeout:    dur("TCP_READ_TIMEOUT", 10*time.Minute),
-			WriteTimeout:   dur("TCP_WRITE_TIMEOUT", 10*time.Second),
-			MaxConnections: num("TCP_MAX_CONNECTIONS", 10000),
-			KeepAlive:      dur("TCP_KEEPALIVE", 60*time.Second),
+			Port:            num("TCP_PORT", 5000),
+			MaxPacketSize:   num("TCP_MAX_PACKET_SIZE", 8192),
+			ReadTimeout:     dur("TCP_READ_TIMEOUT", 10*time.Minute),
+			WriteTimeout:    dur("TCP_WRITE_TIMEOUT", 10*time.Second),
+			MaxConnections:  num("TCP_MAX_CONNECTIONS", 10000),
+			IdentifyTimeout: dur("TCP_IDENTIFY_TIMEOUT", 30*time.Second),
+			MaxPendingPerIP: num("TCP_MAX_PENDING_PER_IP", 100),
+			KeepAlive:       dur("TCP_KEEPALIVE", 60*time.Second),
 		},
 		Postgres: Postgres{
 			Host:     str("POSTGRES_HOST", "localhost"),
@@ -158,6 +366,9 @@ func Load() (*Config, error) {
 			Password: str("POSTGRES_PASSWORD", ""),
 			SSLMode:  str("POSTGRES_SSLMODE", "disable"),
 			MaxConns: int32(num("POSTGRES_MAX_CONNS", 15)),
+
+			TelemetryMaxConns:   int32(num("POSTGRES_TELEMETRY_MAX_CONNS", 10)),
+			TelemetrySyncCommit: bl("TELEMETRY_SYNCHRONOUS_COMMIT", false),
 		},
 		Redis: Redis{
 			Enabled:  bl("REDIS_ENABLED", false),
@@ -171,6 +382,9 @@ func Load() (*Config, error) {
 			AccessTokenTTL:  dur("JWT_ACCESS_TTL", 15*time.Minute),
 			RefreshTokenTTL: dur("JWT_REFRESH_TTL", 720*time.Hour),
 			BcryptCost:      num("BCRYPT_COST", 12),
+
+			PasswordResetTTL: dur("PASSWORD_RESET_TTL", time.Hour),
+			InviteTTL:        dur("CUSTOMER_INVITE_TTL", 72*time.Hour),
 		},
 		Tracking: Tracking{
 			StaleAfter:              dur("DEVICE_STALE_AFTER", 2*time.Minute),
@@ -180,6 +394,9 @@ func Load() (*Config, error) {
 			SimplifyToleranceMeters: flt("HISTORY_SIMPLIFY_TOLERANCE_M", 5),
 			DefaultSpeedLimitKmh:    flt("DEFAULT_SPEED_LIMIT_KMH", 0),
 			OverspeedHysteresisKmh:  flt("OVERSPEED_HYSTERESIS_KMH", 5),
+			HistoryRetentionDays:    num("HISTORY_RETENTION_DAYS", 30),
+			HistoryCleanupInterval:  dur("HISTORY_CLEANUP_INTERVAL", time.Hour),
+			StoreRawPayload:         bl("POSITIONS_STORE_RAW", false),
 		},
 		Commands: Commands{
 			AckTimeout:              dur("COMMAND_ACK_TIMEOUT", 15*time.Second),
@@ -200,7 +417,92 @@ func Load() (*Config, error) {
 			AdminPassword: str("ADMIN_PASSWORD", ""),
 			AdminName:     str("ADMIN_NAME", "Administrador"),
 		},
+		Mail: Mail{
+			AppURL:       strings.TrimRight(str("APP_URL", ""), "/"),
+			From:         str("MAIL_FROM", ""),
+			SMTPHost:     str("SMTP_HOST", ""),
+			SMTPPort:     num("SMTP_PORT", 587),
+			SMTPUsername: str("SMTP_USERNAME", ""),
+			SMTPPassword: str("SMTP_PASSWORD", ""),
+			SMTPTLS:      strings.ToLower(str("SMTP_TLS", SMTPStartTLS)),
+		},
+		Catalog: Catalog{
+			PlanName:            str("CATALOG_PLAN_NAME", "Plano Mensal"),
+			PlanPriceCents:      num("CATALOG_PLAN_PRICE_CENTS", 6990),
+			DefaultDueDay:       num("CATALOG_DEFAULT_DUE_DAY", 10),
+			EquipmentName:       str("CATALOG_EQUIPMENT_NAME", "Rastreador J16 GT06"),
+			EquipmentPriceCents: num("CATALOG_EQUIPMENT_PRICE_CENTS", 15000),
+			SetupDueDays:        num("CATALOG_SETUP_DUE_DAYS", 3),
+		},
+		Payments: Payments{
+			AbacatePayAPIKey:  str("ABACATEPAY_API_KEY", ""),
+			AbacatePayBaseURL: str("ABACATEPAY_BASE_URL", ""),
+			WebhookSecret:     str("ABACATEPAY_WEBHOOK_SECRET", ""),
+			WebhookPublicKey:  str("ABACATEPAY_WEBHOOK_PUBLIC_KEY", ""),
+			PixExpiresIn:      dur("PIX_EXPIRES_IN", 24*time.Hour),
+		},
+		Shipping: Shipping{
+			Sandbox:      bl("MELHORENVIO_SANDBOX", true),
+			BaseURL:      strings.TrimRight(str("MELHORENVIO_BASE_URL", ""), "/"),
+			ClientID:     str("MELHORENVIO_CLIENT_ID", ""),
+			ClientSecret: str("MELHORENVIO_CLIENT_SECRET", ""),
+			Token:        str("MELHORENVIO_TOKEN", ""),
+			RedirectURL:  str("MELHORENVIO_REDIRECT_URL", ""),
+			ContactEmail: str("MELHORENVIO_CONTACT_EMAIL", ""),
+			From: ShippingAddress{
+				Name:            str("MELHORENVIO_FROM_NAME", ""),
+				Phone:           str("MELHORENVIO_FROM_PHONE", ""),
+				Email:           str("MELHORENVIO_FROM_EMAIL", ""),
+				Document:        str("MELHORENVIO_FROM_DOCUMENT", ""),
+				CompanyDocument: str("MELHORENVIO_FROM_COMPANY_DOCUMENT", ""),
+				StateRegister:   str("MELHORENVIO_FROM_STATE_REGISTER", ""),
+				PostalCode:      str("MELHORENVIO_FROM_POSTAL_CODE", ""),
+				Address:         str("MELHORENVIO_FROM_ADDRESS", ""),
+				Number:          str("MELHORENVIO_FROM_NUMBER", ""),
+				Complement:      str("MELHORENVIO_FROM_COMPLEMENT", ""),
+				District:        str("MELHORENVIO_FROM_DISTRICT", ""),
+				City:            str("MELHORENVIO_FROM_CITY", ""),
+				State:           str("MELHORENVIO_FROM_STATE", ""),
+			},
+			WeightKg:       flt("MELHORENVIO_PACKAGE_WEIGHT_KG", 0.3),
+			HeightCm:       num("MELHORENVIO_PACKAGE_HEIGHT_CM", 5),
+			WidthCm:        num("MELHORENVIO_PACKAGE_WIDTH_CM", 12),
+			LengthCm:       num("MELHORENVIO_PACKAGE_LENGTH_CM", 16),
+			InsuranceCents: num("MELHORENVIO_INSURANCE_CENTS", -1),
+			NonCommercial:  bl("MELHORENVIO_NON_COMMERCIAL", true),
+			Services:       str("MELHORENVIO_SERVICES", ""),
+			SyncInterval:   dur("MELHORENVIO_SYNC_INTERVAL", 15*time.Minute),
+		},
+		Billing: Billing{
+			InvoiceLeadDays:  num("BILLING_INVOICE_LEAD_DAYS", 10),
+			SuspendAfterDays: num("BILLING_SUSPEND_AFTER_DAYS", 10),
+			Timezone:         str("BILLING_TIMEZONE", "America/Sao_Paulo"),
+		},
 	}
+
+	// Sem APP_URL, usa a primeira origem do CORS: ela já é o endereço em que
+	// o navegador abre o painel.
+	if cfg.Mail.AppURL == "" && len(cfg.HTTP.CORSOrigins) > 0 {
+		cfg.Mail.AppURL = strings.TrimRight(cfg.HTTP.CORSOrigins[0], "/")
+	}
+	// O callback do OAuth passa pelo mesmo endereço do painel (o /api dele
+	// chega ao backend).
+	if cfg.Shipping.RedirectURL == "" {
+		cfg.Shipping.RedirectURL = cfg.Mail.AppURL + "/api/integrations/melhorenvio/callback"
+	}
+	if cfg.Shipping.InsuranceCents < 0 {
+		cfg.Shipping.InsuranceCents = cfg.Catalog.EquipmentPriceCents
+	}
+	if cfg.Shipping.ContactEmail == "" {
+		cfg.Shipping.ContactEmail = cfg.Bootstrap.AdminEmail
+	}
+
+	proxies, err := parseTrustedProxies(csv("TRUSTED_PROXIES",
+		"127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"))
+	if err != nil {
+		return nil, err
+	}
+	cfg.HTTP.TrustedProxies = proxies
 
 	if len(cfg.Auth.JWTSecret) < 32 {
 		return nil, fmt.Errorf("JWT_SECRET é obrigatório e precisa de ao menos 32 caracteres")
@@ -211,7 +513,74 @@ func Load() (*Config, error) {
 	if cfg.TCP.MaxPacketSize < 512 || cfg.TCP.MaxPacketSize > 1<<20 {
 		return nil, fmt.Errorf("TCP_MAX_PACKET_SIZE fora da faixa aceitável (512..1048576)")
 	}
+	if cfg.Auth.PasswordResetTTL < 5*time.Minute || cfg.Auth.PasswordResetTTL > 24*time.Hour {
+		return nil, fmt.Errorf("PASSWORD_RESET_TTL fora da faixa aceitável (5m..24h)")
+	}
+	if cfg.Auth.InviteTTL < time.Hour || cfg.Auth.InviteTTL > 30*24*time.Hour {
+		return nil, fmt.Errorf("CUSTOMER_INVITE_TTL fora da faixa aceitável (1h..720h)")
+	}
+	if err := cfg.Mail.validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.Billing.validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.Catalog.validate(); err != nil {
+		return nil, err
+	}
+	if cfg.Payments.PixExpiresIn < 5*time.Minute || cfg.Payments.PixExpiresIn > 30*24*time.Hour {
+		return nil, fmt.Errorf("PIX_EXPIRES_IN fora da faixa aceitável (5m..720h)")
+	}
+	if cfg.TCP.IdentifyTimeout < time.Second || cfg.TCP.IdentifyTimeout > cfg.TCP.ReadTimeout {
+		return nil, fmt.Errorf("TCP_IDENTIFY_TIMEOUT fora da faixa (1s..TCP_READ_TIMEOUT)")
+	}
+	if cfg.TCP.MaxPendingPerIP < 0 {
+		return nil, fmt.Errorf("TCP_MAX_PENDING_PER_IP não pode ser negativo")
+	}
+	switch cfg.Tracking.HistoryRetentionDays {
+	case 7, 14, 30:
+	default:
+		return nil, fmt.Errorf("HISTORY_RETENTION_DAYS precisa ser 7, 14 ou 30")
+	}
+	if cfg.Tracking.HistoryCleanupInterval < time.Minute || cfg.Tracking.HistoryCleanupInterval > 24*time.Hour {
+		return nil, fmt.Errorf("HISTORY_CLEANUP_INTERVAL fora da faixa aceitável (1m..24h)")
+	}
+	if cfg.Shipping.SyncInterval < time.Minute || cfg.Shipping.SyncInterval > 24*time.Hour {
+		return nil, fmt.Errorf("MELHORENVIO_SYNC_INTERVAL fora da faixa aceitável (1m..24h)")
+	}
+	if cfg.Shipping.WeightKg <= 0 || cfg.Shipping.HeightCm <= 0 || cfg.Shipping.WidthCm <= 0 || cfg.Shipping.LengthCm <= 0 {
+		return nil, fmt.Errorf("MELHORENVIO_PACKAGE_*: peso e medidas precisam ser positivos")
+	}
 	return cfg, nil
+}
+
+func (b Billing) validate() error {
+	if b.InvoiceLeadDays < 0 || b.InvoiceLeadDays > 60 {
+		return fmt.Errorf("BILLING_INVOICE_LEAD_DAYS fora da faixa aceitável (0..60)")
+	}
+	if b.SuspendAfterDays < 0 || b.SuspendAfterDays > 365 {
+		return fmt.Errorf("BILLING_SUSPEND_AFTER_DAYS fora da faixa aceitável (0..365; 0 desliga)")
+	}
+	if _, err := time.LoadLocation(b.Timezone); err != nil {
+		return fmt.Errorf("BILLING_TIMEZONE inválido: %w", err)
+	}
+	return nil
+}
+
+func (m Mail) validate() error {
+	appURL, err := url.Parse(m.AppURL)
+	if err != nil || (appURL.Scheme != "http" && appURL.Scheme != "https") || appURL.Host == "" {
+		return fmt.Errorf("APP_URL precisa ser o endereço completo do painel, ex.: https://painel.exemplo.com")
+	}
+	switch m.SMTPTLS {
+	case SMTPStartTLS, SMTPTLS, SMTPNoTLS:
+	default:
+		return fmt.Errorf("SMTP_TLS inválido: use %q, %q ou %q", SMTPStartTLS, SMTPTLS, SMTPNoTLS)
+	}
+	if m.Enabled() && m.From == "" {
+		return fmt.Errorf("MAIL_FROM é obrigatório quando SMTP_HOST está definido")
+	}
+	return nil
 }
 
 func str(key, def string) string {
@@ -258,4 +627,26 @@ func csv(key, def string) []string {
 		}
 	}
 	return out
+}
+
+// parseTrustedProxies aceita CIDRs ("10.0.0.0/8") e IPs soltos. O padrão é
+// a própria máquina e as redes privadas, onde ficam os contêineres.
+func parseTrustedProxies(list []string) ([]netip.Prefix, error) {
+	out := make([]netip.Prefix, 0, len(list))
+	for _, item := range list {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if prefix, err := netip.ParsePrefix(item); err == nil {
+			out = append(out, prefix.Masked())
+			continue
+		}
+		addr, err := netip.ParseAddr(item)
+		if err != nil {
+			return nil, fmt.Errorf("TRUSTED_PROXIES: %q não é IP nem CIDR", item)
+		}
+		out = append(out, netip.PrefixFrom(addr, addr.BitLen()))
+	}
+	return out, nil
 }
