@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react';
 
 import { authApi } from '@/api/resources';
-import { onUnauthorized, tokens } from '@/api/client';
+import { ApiError, onUnauthorized, tokens } from '@/api/client';
 import type { User } from '@/types';
 
 interface AuthContextValue {
@@ -22,6 +22,28 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// Último usuário conhecido: sem rede (app aberto offline, oscilação ao
+// abrir o painel) a sessão continua com ele em vez de cair no login.
+const USER_KEY = 'tracker.user';
+
+function cachedUser(): User | null {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? (JSON.parse(raw) as User) : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberUser(user: User | null) {
+  try {
+    if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+    else localStorage.removeItem(USER_KEY);
+  } catch {
+    /* sem storage: só não lembra */
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,9 +60,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       try {
         const me = await authApi.me();
+        rememberUser(me);
         if (active) setUser(me);
-      } catch {
-        tokens.clear();
+      } catch (error) {
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          // O servidor recusou a sessão: acabou.
+          tokens.clear();
+          rememberUser(null);
+        } else if (active) {
+          // Sem rede ou servidor fora: segue com a última sessão conhecida;
+          // o próximo pedido que chegar ao servidor confere o token.
+          setUser(cachedUser());
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -52,11 +83,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // O cliente avisa quando a renovação falhou de vez.
-  useEffect(() => onUnauthorized(() => setUser(null)), []);
+  useEffect(
+    () =>
+      onUnauthorized(() => {
+        rememberUser(null);
+        setUser(null);
+      }),
+    [],
+  );
 
   const login = useCallback(async (email: string, password: string) => {
     const result = await authApi.login(email, password);
     tokens.save(result);
+    rememberUser(result.user);
     setUser(result.user);
   }, []);
 
@@ -70,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     tokens.clear();
+    rememberUser(null);
     setUser(null);
   }, []);
 

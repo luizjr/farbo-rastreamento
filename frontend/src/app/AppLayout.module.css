@@ -1,0 +1,148 @@
+/* Moldura do app: ocupa a tela inteira do celular e respeita o entalhe e a
+   barra de gestos (env(safe-area-inset-*)). */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--surface-base);
+}
+
+/* Três colunas: a do meio (logo) fica sempre no centro da tela, e o
+   indicador de tempo real ocupa a da direita sem empurrá-la. */
+.topbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  column-gap: var(--space-2);
+  padding: calc(env(safe-area-inset-top) + var(--space-2)) var(--space-4) var(--space-2);
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.logo {
+  grid-column: 2;
+  display: flex;
+}
+
+.logo img {
+  display: block;
+  height: 28px;
+  width: auto;
+}
+
+.live {
+  grid-column: 3;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.live::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.liveOn {
+  color: var(--accent);
+}
+
+.liveOn::before {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+/* Tela estreita: o indicador vira só a bolinha e a logo inteira continua
+   cabendo no centro. */
+@media (max-width: 379px) {
+  .liveLabel {
+    display: none;
+  }
+}
+
+.banner {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  text-align: left;
+  color: var(--text-primary);
+  background: var(--warning-soft);
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  text-decoration: none;
+  flex-shrink: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.bannerDanger {
+  background: var(--danger-soft);
+  border-bottom-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.bannerAccent {
+  background: var(--accent-soft);
+  border-bottom-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  font-weight: 600;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tabbar {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  padding: var(--space-1) var(--space-1) calc(env(safe-area-inset-bottom) + var(--space-1));
+  background: var(--surface-sunken);
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-2) 0;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-radius: var(--radius-md);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tabActive {
+  color: var(--accent);
+}
+
+.tabIcon {
+  position: relative;
+  display: inline-flex;
+}
+
+.dot {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+  border: 2px solid var(--surface-sunken);
+}
+
+.tabLabel {
+  font-size: 0.6875rem;
+  font-weight: 600;
+}

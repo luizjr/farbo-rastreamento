@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	netmail "net/mail"
 	"net/netip"
 	"net/url"
 	"os"
@@ -32,6 +33,8 @@ type Config struct {
 	Payments  Payments
 	Catalog   Catalog
 	Shipping  Shipping
+	Alerts    Alerts
+	Push      Push
 }
 
 type HTTP struct {
@@ -207,6 +210,46 @@ type Billing struct {
 	SuspendAfterDays int
 	// Timezone define o "hoje" dos vencimentos.
 	Timezone string
+}
+
+// Alerts regula os alertas por e-mail (internal/alerts).
+type Alerts struct {
+	Enabled bool
+	// Cooldown é o intervalo mínimo entre dois e-mails do mesmo alerta, do
+	// mesmo veículo, para o mesmo destinatário; os repetidos no meio viram
+	// contagem no próximo e-mail.
+	Cooldown time.Duration
+	// MaxEventAge: evento mais velho que isso ao chegar não vira e-mail — é o
+	// rastreador descarregando o que guardou enquanto estava sem sinal.
+	MaxEventAge time.Duration
+	// MaxPerHour é o teto de e-mails de alerta por destinatário por hora.
+	MaxPerHour int
+	// OfflineParkedAfter: rastreador que para de comunicar com o veículo
+	// parado só vira alerta depois desse tempo sem voltar (garagem
+	// subterrânea é normal; horas sem sinal, não).
+	OfflineParkedAfter time.Duration
+	// TowingDistanceMeters: deslocamento com a ignição desligada, a partir do
+	// ponto em que o veículo estacionou, que conta como reboque/furto.
+	TowingDistanceMeters float64
+	// CentralEmails recebem os alertas dos veículos da central (sem dono) e
+	// os alertas de segurança (SOS, bateria desconectada, reboque) de todos.
+	CentralEmails []string
+	// Timezone é o fuso do horário de vigilância e das datas nos e-mails.
+	Timezone string
+}
+
+// Push regula as notificações no celular do app do cliente (Web Push).
+type Push struct {
+	Enabled bool
+	// VAPIDPrivateKey (base64url, 32 bytes) fixa as chaves; vazio gera um
+	// par na primeira subida e guarda no banco, cifrado.
+	VAPIDPrivateKey string
+	// VAPIDSubject identifica a central aos serviços de push (mailto: ou
+	// https:). Vazio usa o endereço de MAIL_FROM ou o APP_URL.
+	VAPIDSubject string
+	// ExtraHosts acrescenta serviços de push aos conhecidos (host:porta; http
+	// só para o próprio computador). Serve para teste.
+	ExtraHosts []string
 }
 
 // Catalog é a tabela de preços usada quando o próprio cliente contrata um
@@ -482,12 +525,36 @@ func Load() (*Config, error) {
 			SuspendAfterDays: num("BILLING_SUSPEND_AFTER_DAYS", 10),
 			Timezone:         str("BILLING_TIMEZONE", "America/Sao_Paulo"),
 		},
+		Alerts: Alerts{
+			Enabled:              bl("ALERTS_ENABLED", true),
+			Cooldown:             dur("ALERTS_COOLDOWN", 30*time.Minute),
+			MaxEventAge:          dur("ALERTS_MAX_EVENT_AGE", 10*time.Minute),
+			MaxPerHour:           num("ALERTS_MAX_PER_HOUR", 20),
+			OfflineParkedAfter:   dur("ALERTS_OFFLINE_PARKED_AFTER", 2*time.Hour),
+			TowingDistanceMeters: float64(num("ALERTS_TOWING_DISTANCE_M", 300)),
+			CentralEmails:        csv("ALERTS_CENTRAL_EMAILS", ""),
+		},
 	}
+	cfg.Push = Push{
+		Enabled:         bl("PUSH_ENABLED", true),
+		VAPIDPrivateKey: str("VAPID_PRIVATE_KEY", ""),
+		VAPIDSubject:    str("VAPID_SUBJECT", ""),
+		ExtraHosts:      csv("PUSH_EXTRA_HOSTS", ""),
+	}
+	// O horário de vigilância segue o fuso da central, o mesmo das faturas.
+	cfg.Alerts.Timezone = str("ALERTS_TIMEZONE", cfg.Billing.Timezone)
 
 	// Sem APP_URL, usa a primeira origem do CORS: ela já é o endereço em que
 	// o navegador abre o painel.
 	if cfg.Mail.AppURL == "" && len(cfg.HTTP.CORSOrigins) > 0 {
 		cfg.Mail.AppURL = strings.TrimRight(cfg.HTTP.CORSOrigins[0], "/")
+	}
+	// Os serviços de push pedem um contato de quem envia (RFC 8292).
+	if cfg.Push.VAPIDSubject == "" {
+		cfg.Push.VAPIDSubject = cfg.Mail.AppURL
+		if from, err := netmail.ParseAddress(cfg.Mail.From); err == nil {
+			cfg.Push.VAPIDSubject = "mailto:" + from.Address
+		}
 	}
 	// O callback do OAuth passa pelo mesmo endereço do painel (o /api dele
 	// chega ao backend).
@@ -529,6 +596,9 @@ func Load() (*Config, error) {
 	if err := cfg.Catalog.validate(); err != nil {
 		return nil, err
 	}
+	if err := cfg.Alerts.validate(); err != nil {
+		return nil, err
+	}
 	if cfg.Payments.PixExpiresIn < 5*time.Minute || cfg.Payments.PixExpiresIn > 30*24*time.Hour {
 		return nil, fmt.Errorf("PIX_EXPIRES_IN fora da faixa aceitável (5m..720h)")
 	}
@@ -553,6 +623,33 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("MELHORENVIO_PACKAGE_*: peso e medidas precisam ser positivos")
 	}
 	return cfg, nil
+}
+
+func (a Alerts) validate() error {
+	if a.Cooldown < time.Minute || a.Cooldown > 24*time.Hour {
+		return fmt.Errorf("ALERTS_COOLDOWN fora da faixa aceitável (1m..24h)")
+	}
+	if a.MaxEventAge < time.Minute || a.MaxEventAge > 24*time.Hour {
+		return fmt.Errorf("ALERTS_MAX_EVENT_AGE fora da faixa aceitável (1m..24h)")
+	}
+	if a.MaxPerHour < 1 || a.MaxPerHour > 1000 {
+		return fmt.Errorf("ALERTS_MAX_PER_HOUR fora da faixa aceitável (1..1000)")
+	}
+	if a.OfflineParkedAfter < time.Minute || a.OfflineParkedAfter > 7*24*time.Hour {
+		return fmt.Errorf("ALERTS_OFFLINE_PARKED_AFTER fora da faixa aceitável (1m..168h)")
+	}
+	if a.TowingDistanceMeters < 50 || a.TowingDistanceMeters > 10000 {
+		return fmt.Errorf("ALERTS_TOWING_DISTANCE_M fora da faixa aceitável (50..10000)")
+	}
+	for _, email := range a.CentralEmails {
+		if _, err := netmail.ParseAddress(email); err != nil {
+			return fmt.Errorf("ALERTS_CENTRAL_EMAILS: endereço inválido %q", email)
+		}
+	}
+	if _, err := time.LoadLocation(a.Timezone); err != nil {
+		return fmt.Errorf("ALERTS_TIMEZONE inválido: %w", err)
+	}
+	return nil
 }
 
 func (b Billing) validate() error {

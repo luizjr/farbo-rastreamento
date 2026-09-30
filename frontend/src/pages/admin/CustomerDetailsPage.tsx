@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { CustomerAlertsSection } from '@/components/alerts/CustomerAlertsSection';
 import { TextField } from '@/components/ui/Field';
 import fieldStyles from '@/components/ui/Field.module.css';
 import { Modal } from '@/components/ui/Modal';
@@ -666,6 +667,9 @@ export function CustomerDetailsPage() {
             </div>
           )}
         </Card>
+
+        <h2 className={styles.sectionTitle}>Alertas por e-mail</h2>
+        <CustomerAlertsSection customerId={id} />
       </div>
 
       {/* O único caminho de um veículo novo: veículo → rastreador → assinatura */}

@@ -172,3 +172,10 @@
   border-bottom-color: var(--accent);
   color: var(--accent);
 }
+
+/* Título de um bloco da página (ex.: "Alertas por e-mail" na ficha do cliente). */
+.sectionTitle {
+  margin: var(--space-5) 0 0;
+  font-size: var(--text-lg);
+  font-weight: 700;
+}

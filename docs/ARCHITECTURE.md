@@ -58,6 +58,9 @@ backend/
     │   └── abacatepay/  cliente da API v2 e verificação de webhook
     ├── websocket/       hub, cliente, ponte Redis (mensagens assinadas)
     ├── realtime/        confere o "data" de cada evento vindo do Redis
+    ├── alerts/          alertas por e-mail e celular: regras, filtros anti-excesso e envio assíncrono
+    ├── push/            notificações no celular: chaves VAPID, aparelhos inscritos e entrega
+    ├── webpush/         protocolo Web Push (RFC 8291 aes128gcm + RFC 8292 VAPID), só biblioteca padrão
     ├── leakcheck/       (testes) procura credenciais em respostas e eventos, em todas as codificações
     ├── api/             rotas REST e middlewares
     ├── database/        pool pgx e migrations

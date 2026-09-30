@@ -18,6 +18,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/addresses"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/alerts"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/api"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/audit"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/auth"
@@ -40,6 +41,7 @@ import (
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols/gt06"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols/h02"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols/tkstar"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/push"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/realtime"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/retention"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/tcp"
@@ -244,6 +246,24 @@ func run() error {
 		geofenceSvc, commandSvc, rawRepo, hub, cfg.Tracking, metrics, log,
 	)
 
+	// ---- Alertas por e-mail ----
+	// Os ganchos só enfileiram: avaliar e enviar corre em segundo plano.
+	alertStore := alerts.NewDBStore(db, billingSvc.IsSuspended)
+	alertEngine := alerts.NewEngine(cfg.Alerts, cfg.Mail.AppURL, alertStore, mail.NewAlertMailer(mailer),
+		stateStore, geocodingSvc, log)
+	if cfg.Alerts.Enabled {
+		eventSvc.SetObserver(alertEngine.OnEvent)
+		ingestor.SetPositionObserver(alertEngine.OnPosition)
+	}
+	// Notificações no celular do app do cliente: o mesmo alerta, outro canal.
+	pushSvc, err := push.NewService(ctx, db, cfg.Push, cfg.Auth.JWTSecret, log)
+	if err != nil {
+		return fmt.Errorf("notificações no celular: %w", err)
+	}
+	if pushSvc.Enabled() {
+		alertEngine.SetPusher(pushSvc)
+	}
+
 	// ---- Servidores ----
 	tcpServer := tcp.NewServer(cfg.TCP, registry, connManager, ingestor, log, metrics)
 
@@ -257,6 +277,7 @@ func run() error {
 		Addresses:   addresses.NewRepository(db),
 		Fulfillment: fulfillmentSvc, Carrier: carrier, CarrierStore: carrierStore,
 		Retention: retentionSvc,
+		Alerts:    alertEngine, AlertStore: alertStore, Push: pushSvc,
 		Positions: positionRepo, States: stateStore,
 		Raw: rawRepo, Ingestor: ingestor, Conns: connManager, Registry: registry,
 		WS: ws.NewHandler(hub, cfg.HTTP.CORSOrigins), Hub: hub,
@@ -281,6 +302,14 @@ func run() error {
 			errCh <- fmt.Errorf("servidor TCP: %w", err)
 		}
 	}()
+
+	if cfg.Alerts.Enabled {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			alertEngine.Run(ctx)
+		}()
+	}
 
 	wg.Add(1)
 	go func() {

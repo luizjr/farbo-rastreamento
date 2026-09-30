@@ -117,6 +117,21 @@ services:
       # Histórico guardado (7, 14 ou 30 dias; cliente e veículo podem ter o próprio).
       HISTORY_RETENTION_DAYS: ${HISTORY_RETENTION_DAYS:-30}
       HISTORY_CLEANUP_INTERVAL: ${HISTORY_CLEANUP_INTERVAL:-1h}
+
+      # Alertas por e-mail (o cliente escolhe quais recebe na tela Alertas).
+      ALERTS_ENABLED: ${ALERTS_ENABLED:-true}
+      ALERTS_COOLDOWN: ${ALERTS_COOLDOWN:-30m}
+      ALERTS_MAX_EVENT_AGE: ${ALERTS_MAX_EVENT_AGE:-10m}
+      ALERTS_MAX_PER_HOUR: ${ALERTS_MAX_PER_HOUR:-20}
+      ALERTS_OFFLINE_PARKED_AFTER: ${ALERTS_OFFLINE_PARKED_AFTER:-2h}
+      ALERTS_TOWING_DISTANCE_M: ${ALERTS_TOWING_DISTANCE_M:-300}
+      ALERTS_CENTRAL_EMAILS: ${ALERTS_CENTRAL_EMAILS:-}
+      ALERTS_TIMEZONE: ${ALERTS_TIMEZONE:-}
+
+      # Notificações no celular do app do cliente (/app).
+      PUSH_ENABLED: ${PUSH_ENABLED:-true}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       # Guardar o pacote bruto de cada posição (depuração; ~3x mais disco).
       POSITIONS_STORE_RAW: ${POSITIONS_STORE_RAW:-false}
       # Gravação das posições sem esperar o fsync (ver README, "Capacidade").

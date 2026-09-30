@@ -62,6 +62,13 @@ export function AppShell() {
                   </span>
                 )}
               </NavLink>
+              <NavLink to="/alertas" className={navClass}>
+                Alertas
+              </NavLink>
+              {/* O app do cliente (PWA) é outra página: link comum, não do router. */}
+              <a href="/app/" className={styles.navLink}>
+                App no celular
+              </a>
             </>
           ) : (
             <>

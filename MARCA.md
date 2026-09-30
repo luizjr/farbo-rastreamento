@@ -14,6 +14,7 @@ Todo o código-fonte: backend, frontend, migrations, scripts, configurações e 
   - qualquer variação que possa ser confundida com eles: grafias parecidas, traduções, siglas, domínios, perfis em redes sociais e nomes de aplicativo.
 - **Logotipos e imagens de marca.** Cobre:
   - as imagens em `frontend/public/assets/`, entre elas `logo-header.png` e `logo-mark.png`;
+  - os ícones do app do cliente em `frontend/public/app/icons/`, gerados da marca;
   - qualquer outra representação gráfica do nome ou do símbolo.
 
   As imagens desse diretório são material de marca e divulgação, não código: não são licenciadas pela Apache 2.0.
@@ -39,7 +40,7 @@ Antes de publicar ou distribuir um produto feito a partir deste código:
    - nos textos alternativos da logo em `frontend/src/components/layout/`;
    - nos modelos de e-mail em `backend/internal/mail/`;
    - no remetente (`MAIL_FROM`) e no README.
-2. **Logotipos e imagens.** Substitua todas as imagens de `frontend/public/assets/`.
+2. **Logotipos e imagens.** Substitua todas as imagens de `frontend/public/assets/` e gere de novo os ícones do app (`frontend/public/app/icons/`, com `node scripts/pwa-icons.mjs` a partir da sua logo). No manifesto do app (`frontend/public/app/manifest.webmanifest`), troque o nome e as cores.
 3. **Cores.** Troque a paleta em:
    - `frontend/src/styles/tokens.css`: `--accent*`, `--success*`, `--surface-*`, `--border-*` e `--text-inverse`;
    - as cores fixas na landing: arquivos `*.module.css` em `frontend/src/components/landing/` e `frontend/src/pages/LandingPage.module.css`;

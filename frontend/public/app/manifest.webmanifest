@@ -1,0 +1,25 @@
+{
+  "id": "/app/",
+  "name": "Farbo Rastreadores",
+  "short_name": "Farbo",
+  "description": "Acompanhe seus veículos em tempo real, receba alertas no celular e pague suas faturas.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "/app/",
+  "scope": "/app/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#060907",
+  "theme_color": "#060907",
+  "categories": ["navigation", "utilities"],
+  "icons": [
+    { "src": "/app/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/app/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/app/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Mapa", "url": "/app/", "icons": [{ "src": "/app/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Alertas", "url": "/app/alertas", "icons": [{ "src": "/app/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Faturas", "url": "/app/faturas", "icons": [{ "src": "/app/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -1,0 +1,22 @@
+/* Ajustes do app instalado: sem "puxar para atualizar" do navegador, sem
+   realce azul no toque e sem seleção de texto acidental nas abas. */
+html,
+body {
+  overscroll-behavior: none;
+  background: var(--surface-base);
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+}
+
+nav a,
+button {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* O mapa ocupa a área que sobra: sem bordas arredondadas do painel. */
+.leaflet-container {
+  background: #0d130e;
+}

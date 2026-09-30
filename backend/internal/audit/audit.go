@@ -52,6 +52,7 @@ const (
 	ActionFulfillmentChanged   = "FULFILLMENT_CHANGED"
 	ActionShippingLabelBought  = "SHIPPING_LABEL_BOUGHT"
 	ActionRetentionChanged     = "HISTORY_RETENTION_CHANGED"
+	ActionAlertSettingsChanged = "ALERT_SETTINGS_CHANGED"
 	ActionPaymentPixCreated    = "PAYMENT_PIX_CREATED"
 	ActionPaymentRefundAsked   = "PAYMENT_REFUND_REQUESTED"
 	ActionPaymentRefunded      = "PAYMENT_REFUNDED"

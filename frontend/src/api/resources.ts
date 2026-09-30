@@ -1,5 +1,8 @@
 import { api, request } from './client';
 import type {
+  AlertSettings,
+  AlertSettingsInput,
+  PushStatus,
   AuditEntry,
   AuthTokens,
   ConnectionInfo,
@@ -306,6 +309,10 @@ export interface InvoiceInput {
 /** Administração (perfil admin). */
 export const customersApi = {
   list: () => api.get<CustomerSummary[]>('/api/customers'),
+  /** Alertas do cliente: o que ele escolheu e o que foi enviado. */
+  alerts: (id: string) => api.get<AlertSettings>(`/api/customers/${id}/alerts`),
+  saveAlerts: (id: string, input: AlertSettingsInput) =>
+    api.put<AlertSettings>(`/api/customers/${id}/alerts`, input),
   get: (id: string) => api.get<CustomerDetail>(`/api/customers/${id}`),
   create: (input: CustomerInput) => api.post<CustomerDetail>('/api/customers', input),
   update: (id: string, input: { name: string; phone: string; document: string; active: boolean }) =>
@@ -425,6 +432,16 @@ export const meApi = {
   /** Assinatura antiga sem veículo: o cliente informa qual veículo ela cobre. */
   attachVehicle: (subscriptionId: string, input: VehicleInput) =>
     api.post<Vehicle>(`/api/me/subscriptions/${subscriptionId}/vehicle`, input),
+  /** Alertas por e-mail: escolhas, horário de vigilância e histórico. */
+  alerts: () => api.get<AlertSettings>('/api/me/alerts'),
+  saveAlerts: (input: AlertSettingsInput) => api.put<AlertSettings>('/api/me/alerts', input),
+  /** Envia um e-mail de teste para o próprio cliente (um por minuto). */
+  testAlerts: () => api.post<AlertSettings>('/api/me/alerts/test'),
+  /** Notificações no celular (app): chave pública e aparelhos inscritos. */
+  push: () => api.get<PushStatus>('/api/me/push'),
+  subscribePush: (subscription: PushSubscriptionJSON) => api.post<void>('/api/me/push/subscriptions', subscription),
+  unsubscribePush: (endpoint: string) => api.post<void>('/api/me/push/unsubscribe', { endpoint }),
+  testPush: () => api.post<{ delivered: number }>('/api/me/push/test'),
 };
 
 /** As operações de Pix que a janela de pagamento usa (cliente ou central). */

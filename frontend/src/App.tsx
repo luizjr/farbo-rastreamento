@@ -6,6 +6,7 @@ import { CustomerDetailsPage } from '@/pages/admin/CustomerDetailsPage';
 import { CustomersPage } from '@/pages/admin/CustomersPage';
 import { InstallersPage } from '@/pages/admin/InstallersPage';
 import { OrdersPage } from '@/pages/admin/OrdersPage';
+import { AlertsPage } from '@/pages/customer/AlertsPage';
 import { InvoicesPage } from '@/pages/customer/InvoicesPage';
 import { MyVehiclesPage } from '@/pages/customer/MyVehiclesPage';
 import { Spinner } from '@/components/ui/Spinner';
@@ -57,6 +58,7 @@ export function App() {
                     <Route element={<RequireCustomer />}>
                       <Route path="meus-veiculos" element={<MyVehiclesPage />} />
                       <Route path="faturas" element={<InvoicesPage />} />
+                      <Route path="alertas" element={<AlertsPage />} />
                     </Route>
 
                     <Route element={<RequireStaff />}>

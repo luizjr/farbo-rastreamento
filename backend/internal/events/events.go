@@ -174,11 +174,19 @@ type Service struct {
 	repo      *Repository
 	publisher Publisher
 	log       *slog.Logger
+
+	// observer recebe cada evento gravado (os alertas por e-mail). Precisa
+	// voltar na hora: roda dentro da ingestão.
+	observer func(*Event)
 }
 
 func NewService(repo *Repository, publisher Publisher, log *slog.Logger) *Service {
 	return &Service{repo: repo, publisher: publisher, log: log.With("component", "events")}
 }
+
+// SetObserver registra quem recebe cada evento gravado. Chame antes de a
+// ingestão começar.
+func (s *Service) SetObserver(fn func(*Event)) { s.observer = fn }
 
 // Record grava o evento e o publica no WebSocket.
 //
@@ -191,6 +199,9 @@ func (s *Service) Record(ctx context.Context, e *Event) {
 	}
 	if s.publisher != nil {
 		s.publisher.PublishFor("vehicle.event", nil, &e.DeviceID, e)
+	}
+	if s.observer != nil {
+		s.observer(e)
 	}
 }
 

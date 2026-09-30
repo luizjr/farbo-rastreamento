@@ -543,3 +543,92 @@ export interface CustomerAccount {
   /** Nulo até o cliente cadastrar; sem ele, não dá para contratar rastreador. */
   deliveryAddress: DeliveryAddress | null;
 }
+
+// ---------------------------------------------------------------------------
+// Alertas por e-mail
+// ---------------------------------------------------------------------------
+
+export type AlertKind =
+  | 'SOS'
+  | 'POWER_CUT'
+  | 'TOWING'
+  | 'IGNITION_GUARD'
+  | 'OVERSPEED'
+  | 'SIGNAL_LOST'
+  | 'LOW_BATTERY'
+  | 'ENGINE_BLOCK'
+  | 'IGNITION';
+
+export interface AlertKindInfo {
+  kind: AlertKind;
+  label: string;
+  description: string;
+  /** Alerta de segurança: também vai para a central. */
+  security: boolean;
+  /** Ligado para quem nunca mexeu nas preferências. */
+  default: boolean;
+}
+
+export type AlertNotificationStatus = 'PENDING' | 'SENT' | 'FAILED';
+
+export interface AlertNotification {
+  id: number;
+  vehicleId: string | null;
+  vehicleName: string;
+  plate: string;
+  /** Tipo gravado no histórico: os do catálogo e ENGINE_BLOCKED, ENGINE_UNBLOCKED, TEST. */
+  kind: string;
+  occurredAt: string;
+  status: AlertNotificationStatus;
+  /** Ocorrências iguais seguradas que o e-mail resumiu. */
+  suppressedCount: number;
+  /** Em quantos celulares o alerta chegou como notificação. */
+  pushSent: number;
+  createdAt: string;
+  sentAt: string | null;
+}
+
+export interface AlertSettings {
+  /** Alertas ligados no servidor (ALERTS_ENABLED). */
+  enabled: boolean;
+  /** Há SMTP configurado; sem ele nenhum e-mail sai. */
+  mailConfigured: boolean;
+  email: string;
+  kinds: AlertKind[];
+  /** Horário de vigilância, "HH:MM". */
+  guardStart: string;
+  guardEnd: string;
+  /** O usuário já salvou preferências (senão valem as padrão). */
+  custom: boolean;
+  suspended: boolean;
+  cooldownMinutes: number;
+  timezone: string;
+  catalog: AlertKindInfo[];
+  history: AlertNotification[];
+}
+
+export interface AlertSettingsInput {
+  kinds: AlertKind[];
+  guardStart: string;
+  guardEnd: string;
+}
+
+// ---------------------------------------------------------------------------
+// Notificações no celular (app do cliente)
+// ---------------------------------------------------------------------------
+
+export interface PushDevice {
+  id: number;
+  userAgent: string;
+  createdAt: string;
+  lastSuccessAt: string | null;
+  endpoint: string;
+}
+
+export interface PushStatus {
+  /** Push ligado no servidor. */
+  enabled: boolean;
+  /** applicationServerKey (VAPID) em base64url. */
+  publicKey: string;
+  devices: PushDevice[];
+}

@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/cors"
 
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/addresses"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/alerts"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/audit"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/auth"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/billing"
@@ -29,6 +30,7 @@ import (
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/orders"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/payments"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/push"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/retention"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/tcp"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/telemetry"
@@ -60,7 +62,12 @@ type Deps struct {
 	// envio não configurado).
 	Fulfillment *fulfillment.Service
 	// Retention decide por quantos dias guardar o histórico de cada veículo.
-	Retention    *retention.Service
+	Retention *retention.Service
+	// Alertas por e-mail: o motor (e-mail de teste) e as preferências.
+	Alerts     *alerts.Engine
+	AlertStore *alerts.DBStore
+	// Push: notificações no celular do app do cliente.
+	Push         *push.Service
 	Carrier      *melhorenvio.Client
 	CarrierStore *melhorenvio.DBStore
 	Owners       *vehicles.OwnerIndex
@@ -221,6 +228,15 @@ func (s *Server) routes() chi.Router {
 				r.Post("/subscriptions/{subscriptionId}/vehicle", s.handleMyAttachVehicle)
 				// Acompanhamento do chip e do rastreador até a casa dele.
 				r.Get("/fulfillments", s.handleMyFulfillments)
+				// Alertas por e-mail: escolhas, histórico e e-mail de teste.
+				r.Get("/alerts", s.handleMyAlerts)
+				r.Put("/alerts", s.handleSaveMyAlerts)
+				r.Post("/alerts/test", s.handleMyAlertsTest)
+				// Notificações no celular (app do cliente).
+				r.Get("/push", s.handleMyPush)
+				r.Post("/push/subscriptions", s.handleMyPushSubscribe)
+				r.Post("/push/unsubscribe", s.handleMyPushUnsubscribe)
+				r.Post("/push/test", s.handleMyPushTest)
 			})
 
 			// Daqui para baixo, só a equipe da central.
@@ -264,6 +280,8 @@ func (s *Server) routes() chi.Router {
 							r.Patch("/", s.handleUpdateCustomer)
 							r.Put("/address", s.handleSaveCustomerAddress)
 							r.Put("/history-retention", s.handleSetCustomerRetention)
+							r.Get("/alerts", s.handleGetCustomerAlerts)
+							r.Put("/alerts", s.handleSaveCustomerAlerts)
 							r.Post("/invite", s.handleInviteCustomer)
 							r.Post("/invoices", s.handleCreateInvoice)
 							r.Post("/trackers", s.handleAdminOrderTracker)

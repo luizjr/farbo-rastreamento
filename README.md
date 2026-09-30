@@ -447,6 +447,112 @@ Para ver os e-mails em desenvolvimento sem mandar nada de verdade, suba o
 axllent/mailpit`) e use `SMTP_HOST=localhost SMTP_PORT=1025 SMTP_TLS=none
 MAIL_FROM=teste@localhost`; a caixa fica em <http://localhost:8025>.
 
+### Alertas por e-mail
+
+O cliente recebe por e-mail o que importa sobre os veículos dele e escolhe o
+que quer receber em **Alertas**, no menu do painel. Na ficha do cliente, a
+central vê as mesmas escolhas e o histórico do que foi enviado.
+
+| Alerta | Quando sai | Padrão |
+| --- | --- | --- |
+| Botão de pânico (SOS) | o aparelho manda o alarme SOS | ligado |
+| Bateria do veículo desconectada | alarme de corte de energia | ligado |
+| Movimento com a ignição desligada | o veículo se afasta `ALERTS_TOWING_DISTANCE_M` (300 m) de onde estacionou, sem ignição — ou o alarme de deslocamento do GT06 | ligado |
+| Ignição no horário de vigilância | ignição ligada dentro do horário escolhido (padrão 22:00–06:00) | ligado |
+| Excesso de velocidade | passa do limite cadastrado no veículo | ligado |
+| Rastreador sem sinal | parou de comunicar: na hora se estava em movimento; parado, só depois de `ALERTS_OFFLINE_PARKED_AFTER` (2 h) | ligado |
+| Bateria do rastreador fraca | alarme de bateria baixa | ligado |
+| Bloqueio e desbloqueio do motor | o aparelho confirmou o comando | ligado |
+| Ignição ligada (qualquer horário) | toda ignição | desligado |
+
+O que evita e-mail demais:
+
+- **Eventos antigos não viram e-mail.** Quando o rastreador volta do
+  sem-sinal, ele descarrega o que guardou. Nada disso gera alerta: só vale o
+  que chegou com menos de `ALERTS_MAX_EVENT_AGE` (10 min) de atraso.
+- **Intervalo mínimo.** O mesmo alerta, do mesmo veículo, para a mesma
+  pessoa, sai no máximo uma vez a cada `ALERTS_COOLDOWN` (30 min). As
+  repetições no meio ficam no histórico e aparecem como contagem no e-mail
+  seguinte.
+- **Teto por hora.** Cada destinatário recebe no máximo `ALERTS_MAX_PER_HOUR`
+  (20) alertas por hora.
+- **Reboque sem falso alarme.** O ponto de referência é onde o veículo
+  estacionou. Ruído do GPS parado não conta: é preciso sair do raio em dois
+  pontos seguidos, ou em um com velocidade acima de 10 km/h. Um alerta por
+  estacionamento.
+- **Suspensão.** Com o acesso suspenso por atraso, o cliente não recebe
+  alertas até pagar.
+
+A central recebe os alertas em `ALERTS_CENTRAL_EMAILS`:
+
+- todos os alertas padrão dos veículos dela (sem dono);
+- os de segurança (SOS, bateria desconectada e reboque) de todos os veículos,
+  inclusive de cliente suspenso ou que desligou esses alertas.
+
+**E-mail de teste.** O botão na tela Alertas manda um e-mail de teste na hora,
+para o cliente conferir que está chegando (limite de um por minuto).
+
+**Como funciona por dentro.** Os alertas não atrasam a ingestão:
+
+- quando um evento ou uma posição é gravado, ele só entra numa fila;
+- a regra é avaliada e o e-mail é enviado em segundo plano;
+- se a fila encher, o alerta é descartado e um aviso vai para o log;
+- o histórico (`alert_notifications`) guarda o que saiu, falhou ou foi
+  segurado, e é apagado depois de 90 dias.
+
+O e-mail traz o local do evento, com endereço (Nominatim, quando responde) e
+link para o mapa, e um botão que abre o veículo no painel.
+
+### App do cliente (PWA)
+
+Além do painel, o cliente tem um app para o celular em **`/app`**
+(`https://painel.seu-dominio.com.br/app`). É a mesma conta e a mesma API,
+numa interface pensada para o celular:
+
+- **Mapa:** os veículos ao vivo, com a lista embaixo (situação, ignição,
+  velocidade, última atualização).
+- **Veículo:** endereço, ignição, velocidade, motor, bateria e sinal. Também
+  bloqueio e liberação do motor (com a mesma trava do painel), trajeto de
+  hoje, de ontem ou das últimas 24 h com distância e velocidade máxima,
+  **Como chegar**, **Compartilhar** e os últimos eventos.
+- **Veículos, Faturas e Alertas:** as mesmas telas do painel, com Pix e
+  acompanhamento do pedido.
+- **Conta:** instalar o app, abrir o painel completo e sair.
+
+É um PWA:
+
+- **Instalável:** no Android e no Chrome, pelo botão **Instalar o app** em
+  Conta ou pelo menu do navegador; no iPhone, em Compartilhar → Adicionar à
+  Tela de Início. Abre pelo ícone, em tela cheia.
+- **Offline:** o app fica guardado no aparelho. Sem internet, ele abre com os
+  últimos dados dos veículos, faturas e alertas, e avisa que está offline.
+  Sair da conta apaga esses dados e desliga as notificações daquele aparelho.
+- **Atualização:** quando sai versão nova, o app mostra "Nova versão
+  disponível — toque para atualizar".
+
+**Notificações no celular (Web Push):**
+
+- **O que chega:** os mesmos alertas do e-mail chegam como notificação
+  (SOS, bateria desconectada, reboque, ignição na vigilância e os demais), com
+  as mesmas escolhas e os mesmos filtros (intervalo mínimo e teto por hora).
+- **O que o toque faz:** abre o veículo no app.
+- **Alertas de segurança:** ficam na tela até o cliente ver.
+- **Como ligar:** o cliente liga em **Alertas → Ativar notificações neste
+  celular**. No iPhone, só com o app instalado na Tela de Início (iOS 16.4+).
+- **Chaves VAPID:** são geradas na primeira subida e guardadas no banco,
+  cifradas com uma chave derivada do `JWT_SECRET`. Trocar o `JWT_SECRET` gera
+  chaves novas, e os clientes precisam ligar as notificações de novo.
+- **Chaves fixas:** para usar as suas, defina `VAPID_PRIVATE_KEY` (base64url,
+  32 bytes).
+- **Segurança:** o servidor só envia para os serviços de push dos navegadores
+  (Google, Mozilla, Apple, Microsoft), para um cliente não conseguir apontá-lo
+  para a rede interna.
+
+Em desenvolvimento (`npm run dev`) o app abre em
+<http://localhost:5173/app/>, mas sem service worker: o modo offline e as
+notificações só existem no build (`npm run build` + nginx ou `vite preview`),
+servido em HTTPS ou em `localhost`.
+
 ---
 
 ## Cadastrando o rastreador
@@ -948,6 +1054,17 @@ mais importam:
 | `TCP_PORT` | `5000` | porta dos rastreadores |
 | `TCP_IDENTIFY_TIMEOUT` | `30s` | conexão que não faz login nesse prazo é derrubada |
 | `TCP_MAX_PENDING_PER_IP` | `100` | conexões sem login aceitas de um mesmo IP |
+| `PUSH_ENABLED` | `true` | notificações no celular do app do cliente |
+| `VAPID_PRIVATE_KEY` | vazio | chave VAPID fixa (base64url, 32 bytes); vazio gera e guarda no banco |
+| `VAPID_SUBJECT` | `mailto:` do `MAIL_FROM` | contato da central para os serviços de push |
+| `ALERTS_ENABLED` | `true` | liga os alertas por e-mail |
+| `ALERTS_COOLDOWN` | `30m` | intervalo mínimo entre dois e-mails iguais (mesmo alerta, veículo e destinatário) |
+| `ALERTS_MAX_EVENT_AGE` | `10m` | evento mais velho que isso ao chegar não vira e-mail |
+| `ALERTS_MAX_PER_HOUR` | `20` | teto de alertas por destinatário por hora |
+| `ALERTS_OFFLINE_PARKED_AFTER` | `2h` | rastreador parado sem sinal vira alerta depois disso |
+| `ALERTS_TOWING_DISTANCE_M` | `300` | deslocamento sem ignição que conta como reboque |
+| `ALERTS_CENTRAL_EMAILS` | vazio | e-mails da central: veículos sem dono e alertas de segurança de todos |
+| `ALERTS_TIMEZONE` | `BILLING_TIMEZONE` | fuso do horário de vigilância |
 | `TRUSTED_PROXIES` | redes privadas | de quem o `X-Forwarded-For` é aceito; com proxy HTTPS na frente, ponha o IP dele |
 | `APP_ENV` | `production` no compose, `development` fora dele | fora de `development`/`test`, segredo de exemplo, óbvio ou repetido impede a subida |
 | `JWT_SECRET` | — | obrigatório; 32+ caracteres sorteados (`openssl rand -base64 48`); trocar encerra todas as sessões |

@@ -54,6 +54,10 @@ type Ingestor struct {
 	metrics   *telemetry.Metrics
 	log       *slog.Logger
 
+	// positionObserver recebe cada posição gravada, com a ignição conhecida
+	// naquele momento (os alertas por e-mail). Precisa voltar na hora.
+	positionObserver func(deviceID uuid.UUID, pos *Position, acc *bool)
+
 	mu           sync.Mutex
 	deviceCache  map[string]cachedDevice
 	vehicleCache map[uuid.UUID]cachedVehicle
@@ -272,6 +276,15 @@ func (i *Ingestor) processTelemetry(ctx context.Context, dev *devices.Device, ms
 	i.evaluateGeofences(ctx, dev, vehicleID, position)
 
 	i.publisher.PublishFor(websocket.TypePositionUpdated, vehicleID, &dev.ID, position)
+	if i.positionObserver != nil {
+		i.positionObserver(dev.ID, position, after.ACC)
+	}
+}
+
+// SetPositionObserver registra quem recebe cada posição gravada. Chame antes
+// de a ingestão começar.
+func (i *Ingestor) SetPositionObserver(fn func(deviceID uuid.UUID, pos *Position, acc *bool)) {
+	i.positionObserver = fn
 }
 
 func (i *Ingestor) buildPosition(dev *devices.Device, msg protocols.TrackerMessage) *Position {
