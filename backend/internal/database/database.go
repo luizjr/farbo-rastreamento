@@ -84,9 +84,31 @@ func connect(ctx context.Context, cfg config.Postgres, maxConns int32, params ma
 	return &DB{Pool: pool}, nil
 }
 
+// migrationLock é a chave do advisory lock que serializa as migrations.
+// Várias instâncias atrás do balanceador sobem juntas num deploy: sem a
+// trava, duas aplicam a mesma migration ao mesmo tempo e a segunda cai
+// ("column already exists"). Com ela, a segunda espera e encontra tudo
+// aplicado.
+const migrationLock int64 = 0x66617262_6f6d6967 // "farbomig"
+
 // Migrate aplica os arquivos SQL embutidos, em ordem lexicográfica, uma vez cada.
 func (db *DB) Migrate(ctx context.Context, log *slog.Logger) error {
-	if _, err := db.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+	// O advisory lock vale para a sessão: tudo roda na mesma conexão.
+	conn, err := db.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, migrationLock); err != nil {
+		return fmt.Errorf("aguardando a trava das migrations: %w", err)
+	}
+	defer func() {
+		// Com o contexto já cancelado o unlock falharia; a trava também cai
+		// quando a conexão fecha.
+		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, migrationLock)
+	}()
+
+	if _, err := conn.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		version    TEXT PRIMARY KEY,
 		applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`); err != nil {
@@ -107,7 +129,7 @@ func (db *DB) Migrate(ctx context.Context, log *slog.Logger) error {
 
 	for _, name := range names {
 		var applied bool
-		if err := db.QueryRow(ctx,
+		if err := conn.QueryRow(ctx,
 			`SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = $1)`, name,
 		).Scan(&applied); err != nil {
 			return err
@@ -121,7 +143,7 @@ func (db *DB) Migrate(ctx context.Context, log *slog.Logger) error {
 			return err
 		}
 
-		tx, err := db.Begin(ctx)
+		tx, err := conn.Begin(ctx)
 		if err != nil {
 			return err
 		}

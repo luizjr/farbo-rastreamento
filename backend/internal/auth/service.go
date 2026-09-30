@@ -358,6 +358,12 @@ func (s *Service) EnsureBootstrapUser(ctx context.Context, cfg config.Bootstrap)
 	}
 
 	user, err := s.CreateUser(ctx, cfg.AdminEmail, cfg.AdminName, RoleAdmin, cfg.AdminPassword)
+	if errors.Is(err, database.ErrConflict) {
+		// Outra instância, subindo junto, criou o mesmo administrador entre
+		// a contagem e o cadastro.
+		s.log.Info("usuário administrador inicial já criado por outra instância")
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("criando usuário inicial: %w", err)
 	}

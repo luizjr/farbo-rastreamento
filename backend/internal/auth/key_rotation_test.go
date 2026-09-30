@@ -321,3 +321,23 @@ func TestBootstrapIgnoresExampleWhenUsersExist(t *testing.T) {
 		t.Fatalf("com usuários cadastrados não há bootstrap: err=%v criados=%d", err, store.created)
 	}
 }
+
+// racingUsers simula duas instâncias subindo juntas: esta contou zero
+// usuários, mas a outra criou o mesmo administrador antes do cadastro.
+type racingUsers struct{ *memorySessionStore }
+
+func (racingUsers) Count(context.Context) (int, error) { return 0, nil }
+
+func (racingUsers) Create(context.Context, *User) error { return database.ErrConflict }
+
+func TestBootstrapToleratesConcurrentInstance(t *testing.T) {
+	store := newMemorySessionStore()
+	svc := serviceWithSecret(t, newSecret, store)
+	svc.users = racingUsers{store}
+	err := svc.EnsureBootstrapUser(context.Background(), config.Bootstrap{
+		AdminEmail: "operacao@farbo.com.br", AdminPassword: "Kx9!vT2#pQ7&mW4z", AdminName: "Administrador",
+	})
+	if err != nil {
+		t.Fatalf("o administrador criado pela outra instância não pode derrubar esta: %v", err)
+	}
+}
