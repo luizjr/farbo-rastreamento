@@ -15,7 +15,8 @@ import (
 // quem sobe o projeto na própria máquina com o .env de sempre. O compose sobe
 // com APP_ENV=production quando a variável não é definida.
 
-// placeholdersFile é a lista única de valores de exemplo e padrões óbvios.
+// placeholdersFile é a lista única de valores de exemplo e padrões óbvios. O
+// Grafana lê o mesmo arquivo (ver docker-compose.yml).
 //
 //go:embed placeholders.txt
 var placeholdersFile string
@@ -50,7 +51,8 @@ func parsePlaceholders(text string) (map[string]bool, []string) {
 }
 
 // normalizeSecret deixa só letras minúsculas e dígitos ASCII, para que
-// "Troque_Esta_Senha" e "troque-esta-senha" contem como o mesmo valor.
+// "Troque_Esta_Senha" e "troque-esta-senha" contem como o mesmo valor. O
+// entrypoint do Grafana faz o mesmo com tr.
 func normalizeSecret(value string) string {
 	var b strings.Builder
 	for _, c := range []byte(strings.ToLower(value)) {

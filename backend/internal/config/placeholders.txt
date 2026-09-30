@@ -4,7 +4,8 @@
 # com um valor público — o JWT_SECRET público deixa qualquer um assinar um
 # token de administrador.
 #
-# Lista única, embutida no backend (internal/config/secrets.go).
+# Lista única: o backend embute este arquivo (internal/config/secrets.go) e o
+# Grafana lê o mesmo arquivo montado no contêiner (deploy/grafana/entrypoint.sh).
 #
 # A comparação ignora maiúsculas e tudo o que não for letra ou dígito ASCII:
 # "Troque_Esta_Senha" conta como "troque-esta-senha". Valor que só tem

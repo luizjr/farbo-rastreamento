@@ -209,15 +209,32 @@ services:
     restart: unless-stopped
     depends_on:
       - prometheus
+    # Roda antes do /run.sh da imagem: recusa senha vazia, curta, "admin" ou
+    # de exemplo (a mesma lista do backend) e grava a senha do .env no banco
+    # do Grafana — num volume já provisionado, trocar só a variável não
+    # mudaria a senha do admin. Detalhes em deploy/grafana/entrypoint.sh.
+    entrypoint: ['/bin/sh', '/etc/farbo/entrypoint.sh']
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?defina GRAFANA_PASSWORD no .env}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?defina GRAFANA_PASSWORD no .env (openssl rand -base64 24)}
       GF_USERS_ALLOW_SIGN_UP: 'false'
       GF_ANALYTICS_REPORTING_ENABLED: 'false'
     volumes:
+      - ./deploy/grafana/entrypoint.sh:/etc/farbo/entrypoint.sh:ro
+      - ./deploy/grafana/healthcheck.sh:/etc/farbo/healthcheck.sh:ro
+      - ./backend/internal/config/placeholders.txt:/etc/farbo/placeholders.txt:ro
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
-    # Acesse por túnel SSH (ssh -L 3001:localhost:3001 servidor).
+    # Saudável só quando a senha configurada entra de fato em /api/user.
+    healthcheck:
+      test: ['CMD', '/bin/sh', '/etc/farbo/healthcheck.sh']
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
+    # Só na máquina: acesse por túnel SSH (ssh -L 3001:localhost:3001 servidor).
+    # Sem o 127.0.0.1 o Docker publica em todas as interfaces e passa por cima
+    # do firewall.
     ports:
       - '127.0.0.1:${GRAFANA_PORT:-3001}:3000'
 

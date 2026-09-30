@@ -103,8 +103,9 @@ portas, e recusa com uma mensagem dizendo qual variável trocar:
 - o mesmo valor em dois segredos (ex.: senha do banco igual ao `JWT_SECRET`);
 - `REDIS_PASSWORD` vazio com `REDIS_ENABLED=true`.
 
-Com `APP_ENV=development` (ou `test`) o backend só avisa no log — nunca use
-assim num servidor.
+O Grafana recusa `GRAFANA_PASSWORD` com menos de 12 caracteres, `admin` ou
+valor da mesma lista. Com `APP_ENV=development` (ou `test`) o backend só avisa
+no log — nunca use assim num servidor.
 
 Sobe seis serviços:
 
@@ -134,6 +135,7 @@ Confira que está de pé:
 ```bash
 curl http://localhost:8080/health
 curl http://localhost:8080/ready
+docker compose ps   # grafana "healthy" = a senha do .env entra de fato
 ```
 
 ### Trocando os segredos
@@ -166,6 +168,13 @@ docker compose up -d
 
 **`REDIS_PASSWORD`** — não fica gravada em lugar nenhum: troque no `.env` e
 `docker compose up -d` (recria o Redis e o backend).
+
+**`GRAFANA_PASSWORD`** — troque no `.env` e `docker compose up -d`. O
+Grafana só lê a variável ao criar o volume; por isso o entrypoint do
+contêiner ([`deploy/grafana/entrypoint.sh`](deploy/grafana/entrypoint.sh))
+grava a senha no admin a cada subida (`grafana cli admin
+reset-admin-password`), e o healthcheck só fica `healthy` quando ela entra.
+A senha anterior deixa de valer.
 
 **`ADMIN_PASSWORD`** só vale para criar o primeiro acesso. Para trocar a senha
 de quem já existe, use **Esqueci minha senha** (a troca encerra as sessões
@@ -943,7 +952,7 @@ mais importam:
 | `JWT_SECRET` | — | obrigatório; 32+ caracteres sorteados (`openssl rand -base64 48`); trocar encerra todas as sessões |
 | `POSTGRES_PASSWORD` | — | obrigatória; trocar exige `\password` no banco ([Trocando os segredos](#trocando-os-segredos)) |
 | `REDIS_PASSWORD` | — | obrigatória no compose e com `REDIS_ENABLED=true` |
-| `GRAFANA_PASSWORD` | — | obrigatória no compose |
+| `GRAFANA_PASSWORD` | — | obrigatória no compose; 12+ caracteres, aplicada a cada subida do Grafana |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | vazio | primeiro acesso, só com o banco sem usuários; exemplos são recusados |
 | `ENGINE_CUT_MAX_SPEED_KMH` | `5` | acima disso o corte é recusado |
 | `ENGINE_CUT_MAX_POSITION_AGE` | `10m` | posição mais velha recusa o corte |
