@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/devices"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/protocols"
 )
 
@@ -37,7 +38,9 @@ type Command struct {
 	DeviceID uuid.UUID `json:"deviceId"`
 
 	Command string `json:"command"`
-	// Payload é o texto exato enviado ao aparelho — é o que a auditoria precisa.
+	// Payload é o texto enviado ao aparelho, com as credenciais (senha de
+	// comando e senha APN) trocadas por *** — o pacote real só vai para o
+	// socket do rastreador; nada que é gravado ou exibido carrega a senha.
 	Payload string `json:"payload"`
 
 	Status string `json:"status"`
@@ -57,6 +60,14 @@ type Command struct {
 	Error    string `json:"error"`
 
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+// Redact troca as credenciais do aparelho por *** no texto enviado e na
+// resposta recebida.
+func (c *Command) Redact(secrets []string) {
+	c.Payload = devices.RedactText(c.Payload, secrets)
+	c.Response = devices.RedactText(c.Response, secrets)
+	c.Error = devices.RedactText(c.Error, secrets)
 }
 
 const columns = `id, device_id, command, COALESCE(payload, ''), status, correlation_key,

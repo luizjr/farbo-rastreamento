@@ -239,8 +239,10 @@ func (s *Server) routes() chi.Router {
 						r.With(auth.RequireRole(auth.RoleAdmin)).Patch("/", s.handleUpdateDevice)
 						r.With(auth.RequireRole(auth.RoleAdmin)).Delete("/", s.handleDeleteDevice)
 						r.Get("/status", s.handleDeviceStatus)
-						r.Get("/provisioning", s.handleDeviceProvisioning)
 						r.Get("/commands", s.handleDeviceCommands)
+						// Configuração do aparelho: só o admin (a tela de
+						// rastreadores também é só dele).
+						r.With(auth.RequireRole(auth.RoleAdmin)).Get("/provisioning", s.handleDeviceProvisioning)
 					})
 				})
 

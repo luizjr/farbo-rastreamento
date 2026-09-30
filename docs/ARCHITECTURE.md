@@ -39,7 +39,7 @@ backend/
     │   └── tkstar/      texto V1, V1.8, V4        (ASSUMED / UNKNOWN)
     ├── tcp/             servidor, sessão, ConnectionManager
     ├── tracking/        posições, estado, simplificação, ingestor
-    ├── devices/         cadastro e status dos rastreadores
+    ├── devices/         cadastro e status dos rastreadores, representação por perfil e redação das senhas
     ├── vehicles/        cadastro dos veículos
     ├── events/          eventos derivados
     ├── commands/        ciclo de vida do comando + regra de segurança
@@ -58,6 +58,7 @@ backend/
     │   └── abacatepay/  cliente da API v2 e verificação de webhook
     ├── websocket/       hub, cliente, ponte Redis (mensagens assinadas)
     ├── realtime/        confere o "data" de cada evento vindo do Redis
+    ├── leakcheck/       (testes) procura credenciais em respostas e eventos, em todas as codificações
     ├── api/             rotas REST e middlewares
     ├── database/        pool pgx e migrations
     ├── telemetry/       log estruturado, métricas, tracing
@@ -169,6 +170,7 @@ uma enxurrada de eventos falsos de entrada em cerca.
 | Pagamentos | chave da AbacatePay só no ambiente (nunca em log), webhook com segredo na URL + HMAC do corpo + idempotência por id, baixa só depois de reconsultar o Pix na API, cliente só gera/consulta Pix das próprias faturas |
 | Redefinição de senha | mesma resposta com ou sem conta, e-mail enviado fora da requisição (sem diferença de tempo), token de 256 bits guardado como hash, uso único, validade curta, um pedido por minuto por conta, troca revoga todas as sessões |
 | Comandos | trava de velocidade no backend, texto sanitizado contra injeção, `CUSTOM` restrito a admin, auditoria de tudo |
+| Credenciais dos rastreadores | senha APN e senha de comando só de escrita: nenhuma leitura as devolve (`devices.View`, lista fechada por perfil); o aparelho recebe o comando real, mas histórico, auditoria, WebSocket e provisionamento (só admin) recebem o texto com a senha trocada por `***` (`devices.RedactBytes`, antes de tornar o pacote legível) |
 | Logs | IMEI mascarado; senha, token e credencial nunca registrados |
 
 ## Escala horizontal

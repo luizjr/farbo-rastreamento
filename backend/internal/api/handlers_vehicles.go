@@ -17,9 +17,12 @@ import (
 
 // vehicleView é o que o painel consome: o veículo com o estado atual do seu
 // rastreador já resolvido, para a lista não precisar de N requisições.
+//
+// O rastreador vai como devices.View, na representação do perfil de quem
+// chama: nunca com senha, e só o admin vê a configuração do aparelho.
 type vehicleView struct {
 	*vehicles.Vehicle
-	Device       *devices.Device    `json:"device"`
+	Device       *devices.View      `json:"device"`
 	LastPosition *tracking.Position `json:"lastPosition"`
 	State        *tracking.State    `json:"state"`
 	Connected    bool               `json:"connected"`
@@ -52,7 +55,7 @@ func (s *Server) handleListVehicles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	views, err := s.vehicleViews(r.Context(), list, isCustomer)
+	views, err := s.vehicleViews(r.Context(), list, deviceAudience(r))
 	if err != nil {
 		handleStoreError(w, err, "veículos não encontrados")
 		return
@@ -61,8 +64,8 @@ func (s *Server) handleListVehicles(w http.ResponseWriter, r *http.Request) {
 }
 
 // vehicleViews junta a cada veículo o rastreador, a última posição e o
-// estado. Para o cliente, o rastreador vai sem credenciais nem anotações.
-func (s *Server) vehicleViews(ctx context.Context, list []*vehicles.Vehicle, forCustomer bool) ([]vehicleView, error) {
+// estado. O rastreador sai na representação do perfil (audience).
+func (s *Server) vehicleViews(ctx context.Context, list []*vehicles.Vehicle, audience devices.Audience) ([]vehicleView, error) {
 	allDevices, err := s.Devices.List(ctx)
 	if err != nil {
 		return nil, err
@@ -97,10 +100,7 @@ func (s *Server) vehicleViews(ctx context.Context, list []*vehicles.Vehicle, for
 			view.State = s.States.Get(*vehicle.DeviceID)
 			if device != nil {
 				_, view.Connected = s.Conns.Get(device.IMEI)
-				view.Device = device
-				if forCustomer {
-					view.Device = device.ForCustomer()
-				}
+				view.Device = device.View(audience)
 			}
 		}
 		views = append(views, view)
@@ -113,8 +113,6 @@ func (s *Server) handleGetVehicle(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, isCustomer := customerOf(r)
-
 	view := vehicleView{Vehicle: vehicle}
 	days, err := s.historyDays(r.Context(), vehicle)
 	if err != nil {
@@ -126,10 +124,7 @@ func (s *Server) handleGetVehicle(w http.ResponseWriter, r *http.Request) {
 		device, err := s.Devices.Get(r.Context(), *vehicle.DeviceID)
 		if err == nil {
 			_, view.Connected = s.Conns.Get(device.IMEI)
-			view.Device = device
-			if isCustomer {
-				view.Device = device.ForCustomer()
-			}
+			view.Device = device.View(deviceAudience(r))
 		}
 		if position, err := s.Positions.Latest(r.Context(), *vehicle.DeviceID); err == nil {
 			view.LastPosition = position

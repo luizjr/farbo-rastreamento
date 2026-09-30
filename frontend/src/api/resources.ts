@@ -164,6 +164,11 @@ export const commandsApi = {
 // Dispositivos
 // ---------------------------------------------------------------------------
 
+/**
+ * Cadastro/edição de rastreador. As senhas são só de escrita: na edição,
+ * senha vazia (ou ausente) mantém a atual e `clear*` apaga. Sem
+ * `commandOverrides` os textos atuais ficam como estão.
+ */
 export interface DeviceInput {
   imei: string;
   model?: string;
@@ -174,13 +179,40 @@ export interface DeviceInput {
   apn?: string;
   apnUser?: string;
   apnPassword?: string;
+  clearApnPassword?: boolean;
   serverHost?: string;
   serverPort?: number | null;
   reportIntervalSeconds?: number | null;
   heartbeatIntervalSeconds?: number | null;
   commandPassword?: string;
+  clearCommandPassword?: boolean;
   commandOverrides?: Record<string, string>;
   notes?: string;
+}
+
+/**
+ * Formulário de edição a partir do rastreador lido. Copia campo a campo só o
+ * que é editável: as senhas começam vazias (a API não as devolve; vazio
+ * mantém a atual) e os overrides ficam de fora (ausente mantém os atuais).
+ */
+export function deviceInputFrom(device: Device): DeviceInput {
+  return {
+    imei: device.imei,
+    model: device.model,
+    manufacturer: device.manufacturer,
+    protocol: device.protocol,
+    firmware: device.firmware,
+    phoneNumber: device.phoneNumber,
+    apn: device.apn,
+    apnUser: device.apnUser,
+    apnPassword: '',
+    serverHost: device.serverHost,
+    serverPort: device.serverPort,
+    reportIntervalSeconds: device.reportIntervalSeconds,
+    heartbeatIntervalSeconds: device.heartbeatIntervalSeconds,
+    commandPassword: '',
+    notes: device.notes,
+  };
 }
 
 export const devicesApi = {

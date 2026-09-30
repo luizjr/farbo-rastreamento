@@ -13,6 +13,7 @@ import (
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/auth"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/billing"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/database"
+	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/devices"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/fulfillment"
 	"github.com/pedrofarbo/farbo-rastreamento/backend/internal/payments"
 )
@@ -54,7 +55,8 @@ func (s *Server) customerDetail(ctx context.Context, id uuid.UUID) (*customerDet
 	if err != nil {
 		return nil, err
 	}
-	views, err := s.vehicleViews(ctx, owned, false)
+	// A ficha do cliente é só do admin (ver as rotas).
+	views, err := s.vehicleViews(ctx, owned, devices.AudienceAdmin)
 	if err != nil {
 		return nil, err
 	}

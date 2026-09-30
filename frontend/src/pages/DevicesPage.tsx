@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { devicesApi, diagnosticsApi, vehiclesApi } from '@/api/resources';
+import { deviceInputFrom, devicesApi, diagnosticsApi, vehiclesApi } from '@/api/resources';
 import type { DeviceInput, VehicleInput } from '@/api/resources';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { SelectField, TextField } from '@/components/ui/Field';
+import { fieldStyles, SelectField, TextField } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
@@ -22,17 +22,67 @@ const EMPTY_DEVICE: DeviceInput = {
   manufacturer: 'TKSTAR',
   protocol: '',
   phoneNumber: '',
+  apn: '',
+  apnUser: '',
+  apnPassword: '',
   serverHost: '',
   serverPort: null,
   commandPassword: '',
 };
+
+/**
+ * Campo de senha só de escrita: a API nunca devolve a senha, só diz se ela
+ * está definida. Em branco mantém a atual; "Apagar" remove.
+ */
+function SecretField({
+  label,
+  hint,
+  isSet,
+  value,
+  clear,
+  onChange,
+  onClear,
+}: {
+  label: string;
+  hint: string;
+  isSet: boolean;
+  value: string;
+  clear: boolean;
+  onChange: (value: string) => void;
+  onClear: (clear: boolean) => void;
+}) {
+  return (
+    <div>
+      <TextField
+        label={label}
+        type="password"
+        autoComplete="new-password"
+        placeholder={isSet && !clear ? '•••••• (definida)' : ''}
+        disabled={clear}
+        hint={
+          !isSet ? hint : clear ? 'Será apagada ao salvar.' : 'Definida — deixe em branco para manter.'
+        }
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {isSet && (
+        <label style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+          <input type="checkbox" checked={clear} onChange={(event) => onClear(event.target.checked)} />
+          Apagar a senha
+        </label>
+      )}
+    </div>
+  );
+}
 
 export function DevicesPage() {
   const { notify } = useToast();
   const queryClient = useQueryClient();
 
   const [deviceForm, setDeviceForm] = useState<DeviceInput | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // Rastreador em edição: é dele que vêm os indicadores de senha definida.
+  const [editing, setEditing] = useState<Device | null>(null);
+  const editingId = editing?.id ?? null;
   const [provisioningFor, setProvisioningFor] = useState<Device | null>(null);
   const [vehicleForm, setVehicleForm] = useState<VehicleInput | null>(null);
 
@@ -53,7 +103,7 @@ export function DevicesPage() {
       queryClient.invalidateQueries({ queryKey: ['devices'] });
       notify({ tone: 'success', title: editingId ? 'Rastreador atualizado' : 'Rastreador cadastrado' });
       setDeviceForm(null);
-      setEditingId(null);
+      setEditing(null);
     },
     onError: (error: Error) =>
       notify({ tone: 'error', title: 'Não foi possível salvar', description: error.message }),
@@ -92,7 +142,7 @@ export function DevicesPage() {
             <Button
               variant="primary"
               onClick={() => {
-                setEditingId(null);
+                setEditing(null);
                 setDeviceForm(EMPTY_DEVICE);
               }}
             >
@@ -157,22 +207,8 @@ export function DevicesPage() {
                             size="small"
                             variant="ghost"
                             onClick={() => {
-                              setEditingId(device.id);
-                              setDeviceForm({
-                                imei: device.imei,
-                                model: device.model,
-                                manufacturer: device.manufacturer,
-                                protocol: device.protocol,
-                                firmware: device.firmware,
-                                phoneNumber: device.phoneNumber,
-                                apn: device.apn,
-                                serverHost: device.serverHost,
-                                serverPort: device.serverPort,
-                                reportIntervalSeconds: device.reportIntervalSeconds,
-                                commandPassword: device.commandPassword,
-                                commandOverrides: device.commandOverrides,
-                                notes: device.notes,
-                              });
+                              setEditing(device);
+                              setDeviceForm(deviceInputFrom(device));
                             }}
                           >
                             Editar
@@ -272,14 +308,50 @@ export function DevicesPage() {
                   })
                 }
               />
+            </div>
+
+            <div className={styles.formRow}>
               <TextField
-                label="Senha de comando"
-                hint="Apenas se o firmware exigir."
-                value={deviceForm.commandPassword ?? ''}
-                onChange={(event) =>
-                  setDeviceForm({ ...deviceForm, commandPassword: event.target.value })
+                label="APN do chip"
+                placeholder="zap.vivo.com.br"
+                value={deviceForm.apn ?? ''}
+                onChange={(event) => setDeviceForm({ ...deviceForm, apn: event.target.value })}
+              />
+              <TextField
+                label="Usuário APN"
+                value={deviceForm.apnUser ?? ''}
+                onChange={(event) => setDeviceForm({ ...deviceForm, apnUser: event.target.value })}
+              />
+            </div>
+
+            <div className={styles.formRow}>
+              <SecretField
+                label="Senha APN"
+                hint="Só se a operadora exigir."
+                isSet={Boolean(editing?.apnPasswordSet)}
+                value={deviceForm.apnPassword ?? ''}
+                clear={Boolean(deviceForm.clearApnPassword)}
+                onChange={(apnPassword) => setDeviceForm({ ...deviceForm, apnPassword })}
+                onClear={(clearApnPassword) =>
+                  setDeviceForm({ ...deviceForm, clearApnPassword, apnPassword: '' })
                 }
               />
+              <SecretField
+                label="Senha de comando"
+                hint="Apenas se o firmware exigir."
+                isSet={Boolean(editing?.commandPasswordSet)}
+                value={deviceForm.commandPassword ?? ''}
+                clear={Boolean(deviceForm.clearCommandPassword)}
+                onChange={(commandPassword) => setDeviceForm({ ...deviceForm, commandPassword })}
+                onClear={(clearCommandPassword) =>
+                  setDeviceForm({ ...deviceForm, clearCommandPassword, commandPassword: '' })
+                }
+              />
+            </div>
+
+            <div className={styles.note}>
+              As senhas são só de escrita: depois de salvas não voltam para a tela nem aparecem
+              no histórico de comandos (lá, e nos textos personalizados, a senha vira ***).
             </div>
 
             <div className={styles.note}>
@@ -321,6 +393,11 @@ export function DevicesPage() {
                   <div className={styles.mono}>
                     {command.available ? command.text : `indisponível — ${command.reason}`}
                   </div>
+                  {command.available && command.redacted && (
+                    <div className={fieldStyles.hint}>
+                      Digite a senha de comando do aparelho no lugar de *** ao enviar.
+                    </div>
+                  )}
                 </div>
               ))
             )}

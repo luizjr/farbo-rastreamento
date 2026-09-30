@@ -1,6 +1,7 @@
 package devices
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -31,7 +32,11 @@ func (s *Service) GetByIMEI(ctx context.Context, imei string) (*Device, error) {
 }
 
 func (s *Service) Create(ctx context.Context, in Input) (*Device, error) {
-	normalized, err := s.validate(in)
+	merged, err := mergeInput(nil, in)
+	if err != nil {
+		return nil, err
+	}
+	normalized, err := s.validate(merged)
 	if err != nil {
 		return nil, err
 	}
@@ -39,11 +44,71 @@ func (s *Service) Create(ctx context.Context, in Input) (*Device, error) {
 }
 
 func (s *Service) Update(ctx context.Context, id uuid.UUID, in Input) (*Device, error) {
-	normalized, err := s.validate(in)
+	current, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	merged, err := mergeInput(current, in)
+	if err != nil {
+		return nil, err
+	}
+	normalized, err := s.validate(merged)
 	if err != nil {
 		return nil, err
 	}
 	return s.repo.Update(ctx, id, normalized)
+}
+
+// mergeInput aplica a regra de "só escrita" das credenciais (ver Input):
+// senha vazia mantém a atual, Clear* apaga, e overrides ausentes ficam como
+// estão. current nulo é a criação.
+//
+// Um override redigido (com ***) que volta igual ao que a leitura mostrou é
+// o texto atual reenviado sem mudança: mantém-se o original. Qualquer outro
+// texto com *** é recusado — gravá-lo mandaria "***" no lugar da senha.
+func mergeInput(current *Device, in Input) (Input, error) {
+	if in.ClearAPNPassword && in.APNPassword != "" {
+		return in, invalid("informe a nova senha APN ou peça para apagá-la, não os dois")
+	}
+	if in.ClearCommandPassword && strings.TrimSpace(in.CommandPassword) != "" {
+		return in, invalid("informe a nova senha de comando ou peça para apagá-la, não os dois")
+	}
+	if current == nil {
+		current = &Device{}
+	}
+
+	switch {
+	case in.ClearAPNPassword:
+		in.APNPassword = ""
+	case in.APNPassword == "":
+		in.APNPassword = current.APNPassword
+	}
+	switch {
+	case in.ClearCommandPassword:
+		in.CommandPassword = ""
+	case strings.TrimSpace(in.CommandPassword) == "":
+		in.CommandPassword = current.CommandPassword
+	}
+
+	if in.CommandOverrides == nil {
+		in.CommandOverrides = current.CommandOverrides
+		return in, nil
+	}
+	secrets := current.Secrets()
+	merged := make(map[string]string, len(in.CommandOverrides))
+	for key, value := range in.CommandOverrides {
+		if hasRedaction(value) {
+			previous, ok := current.CommandOverrides[strings.ToUpper(strings.TrimSpace(key))]
+			if !ok || RedactText(previous, secrets) != strings.TrimSpace(value) {
+				return in, invalid("o texto de %s contém %q: digite o texto completo, "+
+					"com a senha, ou envie-o como a leitura mostrou para mantê-lo", key, Redacted)
+			}
+			value = previous
+		}
+		merged[key] = value
+	}
+	in.CommandOverrides = merged
+	return in, nil
 }
 
 func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
@@ -140,12 +205,18 @@ func (s *Service) validate(in Input) (Input, error) {
 // ProvisioningCommands devolve os comandos sugeridos para apontar o aparelho
 // para este servidor. Nada é enviado automaticamente (§30): a interface mostra
 // o texto e o operador decide.
+//
+// O texto sai com as credenciais redigidas (***), como todo texto que deixa o
+// backend: a tela é só do admin, mas a senha continua sendo só de escrita.
+// Quem manda o SMS digita a senha de comando no lugar do *** — Redacted
+// avisa quando isso é preciso.
 type ProvisioningCommand struct {
 	Type        protocols.CommandType `json:"type"`
 	Description string                `json:"description"`
 	Text        string                `json:"text"`
 	Available   bool                  `json:"available"`
 	Reason      string                `json:"reason,omitempty"`
+	Redacted    bool                  `json:"redacted,omitempty"`
 }
 
 func (s *Service) ProvisioningCommands(dev *Device) []ProvisioningCommand {
@@ -155,6 +226,7 @@ func (s *Service) ProvisioningCommands(dev *Device) []ProvisioningCommand {
 		return out
 	}
 
+	secrets := dev.Secrets()
 	build := func(cmdType protocols.CommandType, description string, params map[string]string) {
 		entry := ProvisioningCommand{Type: cmdType, Description: description}
 		raw, err := proto.EncodeCommand(protocols.Command{
@@ -165,10 +237,12 @@ func (s *Service) ProvisioningCommands(dev *Device) []ProvisioningCommand {
 			Raw:      dev.CommandOverrides[string(cmdType)],
 		})
 		if err != nil {
-			entry.Reason = err.Error()
+			entry.Reason = RedactText(err.Error(), secrets)
 		} else {
+			redacted := RedactBytes(raw, secrets)
 			entry.Available = true
-			entry.Text = printableCommand(raw)
+			entry.Redacted = !bytes.Equal(redacted, raw)
+			entry.Text = printableCommand(redacted)
 		}
 		out = append(out, entry)
 	}

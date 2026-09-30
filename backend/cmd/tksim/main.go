@@ -46,6 +46,9 @@ type options struct {
 	acc       bool
 	moving    bool
 	protocol  string
+	// echo imita o firmware que devolve o comando recebido na resposta —
+	// senha inclusa. Serve para conferir que o painel não a mostra.
+	echo bool
 }
 
 func main() {
@@ -74,6 +77,7 @@ func parseFlags() options {
 	flag.BoolVar(&opts.acc, "acc", false, "começar com a ignição ligada")
 	flag.BoolVar(&opts.moving, "moving", false, "deslocar o veículo a cada posição")
 	flag.StringVar(&opts.protocol, "protocol", "gt06", "protocolo simulado (gt06)")
+	flag.BoolVar(&opts.echo, "echo", false, "repetir o comando recebido na resposta (como alguns firmwares)")
 	flag.Parse()
 
 	if err := protocols.ValidateIMEI(opts.imei); err != nil {
@@ -223,6 +227,9 @@ func (s *simulator) handleServerFrame(frame []byte) {
 	fmt.Printf("<- comando recebido: %q (flag %d)\n", text, serverFlag)
 
 	reply := s.applyCommand(text)
+	if s.opts.echo {
+		reply = text + " " + reply
+	}
 	time.Sleep(400 * time.Millisecond) // o aparelho real leva um instante
 
 	if err := s.write(gt06.BuildCommandReply(serverFlag, reply, s.nextSerial())); err != nil {

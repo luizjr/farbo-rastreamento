@@ -157,10 +157,12 @@ func (s *Service) Send(ctx context.Context, req Request) (*Command, error) {
 		return nil, fmt.Errorf("protocolo %s: %w", proto.Name(), err)
 	}
 
+	// O aparelho recebe o pacote real; o registro, a auditoria e o
+	// WebSocket recebem a versão com as credenciais trocadas por ***.
 	cmd := &Command{
 		DeviceID:       req.Device.ID,
 		Command:        string(req.Type),
-		Payload:        printable(payload),
+		Payload:        printable(devices.RedactBytes(payload, req.Device.Secrets())),
 		Status:         StatusPending,
 		CorrelationKey: key,
 		RequestedBy:    req.UserID,
@@ -304,10 +306,15 @@ func (s *Service) reject(ctx context.Context, req Request, reason string) (*Comm
 // Protocolos com chave de correlação casam pelo valor exato. Os de texto, que
 // não carregam identificador, casam com o comando aberto mais antigo — e isso
 // fica explícito no registro.
-func (s *Service) HandleAck(ctx context.Context, deviceID uuid.UUID, vehicleID *uuid.UUID, key uint32, response string, success bool) {
+//
+// Há firmware que ecoa o comando recebido, senha inclusa: a resposta é
+// redigida antes de ir para o registro, a auditoria, o log e o WebSocket.
+func (s *Service) HandleAck(ctx context.Context, dev *devices.Device, vehicleID *uuid.UUID, key uint32, response string, success bool) {
 	var cmd *Command
 	var err error
+	deviceID := dev.ID
 	exact := key != 0
+	response = devices.RedactText(response, dev.Secrets())
 
 	if exact {
 		cmd, err = s.repo.FindOpenByCorrelation(ctx, deviceID, key)
@@ -389,8 +396,22 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (*Command, error) {
 	return s.repo.Get(ctx, id)
 }
 
-func (s *Service) ListByDevice(ctx context.Context, deviceID uuid.UUID, limit int) ([]*Command, error) {
-	return s.repo.ListByDevice(ctx, deviceID, limit)
+// ListByDevice devolve o histórico do aparelho já pronto para sair na API.
+//
+// Os registros são gravados redigidos; a redação é refeita aqui com as
+// credenciais atuais para cobrir o que um backend antigo tenha gravado (a
+// migration 0012 limpa o histórico, mas uma instância anterior ainda no ar
+// durante a troca de versão pode gravar depois dela).
+func (s *Service) ListByDevice(ctx context.Context, dev *devices.Device, limit int) ([]*Command, error) {
+	list, err := s.repo.ListByDevice(ctx, dev.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	secrets := dev.Secrets()
+	for _, cmd := range list {
+		cmd.Redact(secrets)
+	}
+	return list, nil
 }
 
 func (s *Service) publish(topic string, vehicleID, deviceID *uuid.UUID, data any) {

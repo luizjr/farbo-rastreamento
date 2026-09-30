@@ -247,12 +247,14 @@ func (r *recordingAudit) actions() []string {
 type recordingPublisher struct {
 	mu     sync.Mutex
 	topics []string
+	data   []any
 }
 
-func (r *recordingPublisher) PublishFor(eventType string, _, _ *uuid.UUID, _ any) {
+func (r *recordingPublisher) PublishFor(eventType string, _, _ *uuid.UUID, data any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.topics = append(r.topics, eventType)
+	r.data = append(r.data, data)
 }
 
 // ---------------------------------------------------------------------------
@@ -503,7 +505,7 @@ func TestAckMatchesCommandByCorrelationKey(t *testing.T) {
 	}
 
 	// Responde ao SEGUNDO comando: a chave precisa decidir qual foi.
-	h.service.HandleAck(ctx, h.device.ID, nil, second.CorrelationKey, "DYD=Success!", true)
+	h.service.HandleAck(ctx, h.device, nil, second.CorrelationKey, "DYD=Success!", true)
 
 	updated, _ := h.store.Get(ctx, second.ID)
 	if updated.Status != StatusAcknowledged {
@@ -531,7 +533,7 @@ func TestAckWithFailureResponseMarksFailed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h.service.HandleAck(ctx, h.device.ID, nil, cmd.CorrelationKey, "DYD=Fail! Speed too high", false)
+	h.service.HandleAck(ctx, h.device, nil, cmd.CorrelationKey, "DYD=Fail! Speed too high", false)
 
 	updated, _ := h.store.Get(ctx, cmd.ID)
 	if updated.Status != StatusFailed {
@@ -549,7 +551,7 @@ func TestAckWithoutCorrelationFallsBackToOldestOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h.service.HandleAck(ctx, h.device.ID, nil, 0, "OK", true)
+	h.service.HandleAck(ctx, h.device, nil, 0, "OK", true)
 
 	updated, _ := h.store.Get(ctx, first.ID)
 	if updated.Status != StatusAcknowledged {

@@ -48,6 +48,13 @@ export interface AuthTokens {
   user: User;
 }
 
+/**
+ * Rastreador como a API devolve. As senhas (APN e de comando) são só de
+ * escrita e nunca chegam aqui, nem para o admin: no lugar vêm os indicadores
+ * `apnPasswordSet`/`commandPasswordSet` (só para o admin). Operador e
+ * visualizador recebem só identificação e situação; os campos de
+ * configuração chegam vazios. Nos overrides, a senha aparece como `***`.
+ */
 export interface Device {
   id: string;
   imei: string;
@@ -60,12 +67,12 @@ export interface Device {
   lastSeenAt: string | null;
   apn: string;
   apnUser: string;
-  apnPassword: string;
+  apnPasswordSet?: boolean;
   serverHost: string;
   serverPort: number | null;
   reportIntervalSeconds: number | null;
   heartbeatIntervalSeconds: number | null;
-  commandPassword: string;
+  commandPasswordSet?: boolean;
   commandOverrides: Record<string, string>;
   notes: string;
   createdAt: string;
@@ -243,9 +250,12 @@ export interface AuditEntry {
 export interface ProvisioningCommand {
   type: CommandType;
   description: string;
+  /** Texto do comando com a senha trocada por `***` (ver `redacted`). */
   text: string;
   available: boolean;
   reason?: string;
+  /** O texto levava a senha de comando: quem envia digita a senha no lugar do `***`. */
+  redacted?: boolean;
 }
 
 /** Eventos recebidos pelo WebSocket (§18). */

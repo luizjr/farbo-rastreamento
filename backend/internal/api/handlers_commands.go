@@ -109,7 +109,7 @@ func (s *Server) handleVehicleCommands(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	list, err := s.Commands.ListByDevice(r.Context(), device.ID, queryInt(r, "limit", 50))
+	list, err := s.Commands.ListByDevice(r.Context(), device, queryInt(r, "limit", 50))
 	if err != nil {
 		handleStoreError(w, err, "comandos não encontrados")
 		return
@@ -123,7 +123,12 @@ func (s *Server) handleDeviceCommands(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "id inválido")
 		return
 	}
-	list, err := s.Commands.ListByDevice(r.Context(), id, queryInt(r, "limit", 50))
+	device, err := s.Devices.Get(r.Context(), id)
+	if err != nil {
+		handleStoreError(w, err, "dispositivo não encontrado")
+		return
+	}
+	list, err := s.Commands.ListByDevice(r.Context(), device, queryInt(r, "limit", 50))
 	if err != nil {
 		handleStoreError(w, err, "comandos não encontrados")
 		return

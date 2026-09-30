@@ -126,7 +126,7 @@ func (i *Ingestor) HandleMessage(ctx context.Context, conn *tcp.DeviceConnection
 		return nil
 	case protocols.KindCommandAck:
 		vehicleID := i.vehicleIDFor(ctx, dev.ID)
-		i.commands.HandleAck(ctx, dev.ID, vehicleID, msg.CorrelationKey,
+		i.commands.HandleAck(ctx, dev, vehicleID, msg.CorrelationKey,
 			msg.Response, !failedResponse(msg.Response))
 		return nil
 	}

@@ -27,6 +27,7 @@ React
 - [Subindo tudo](#subindo-tudo)
 - [Primeiro acesso](#primeiro-acesso)
 - [Cadastrando o rastreador](#cadastrando-o-rastreador)
+  - [Credenciais dos rastreadores](#credenciais-dos-rastreadores)
 - [Apontando o TKSTAR para o servidor](#apontando-o-tkstar-para-o-servidor)
 - [Descobrindo a variante do seu aparelho](#descobrindo-a-variante-do-seu-aparelho)
 - [Simulador](#simulador)
@@ -388,6 +389,44 @@ servidor**. Tráfego de IMEI desconhecido é recusado e a sessão é encerrada.
 O campo *senha de comando* só é necessário se o firmware exigir autenticação
 nos comandos (alguns pedem `DYD,123456#` em vez de `DYD#`).
 
+### Credenciais dos rastreadores
+
+A senha APN do chip e a senha de comando do aparelho são **só de escrita**:
+
+- nenhuma leitura da API as devolve, para perfil nenhum — nem para o admin.
+  No lugar delas o admin recebe `apnPasswordSet` / `commandPasswordSet`; na
+  tela de edição o campo fica em branco com *definida — deixe em branco para
+  manter*. Senha vazia (ou ausente) no `PATCH` mantém a atual;
+  `clearApnPassword` / `clearCommandPassword` apagam;
+- o aparelho recebe o comando real, mas o que é gravado no histórico, na
+  auditoria e publicado no WebSocket sai com a senha trocada por `***`
+  (`DYD,***#`) — inclusive dentro do pacote binário do GT06, nos textos
+  personalizados (overrides), no comando livre e na resposta do aparelho,
+  que alguns firmwares ecoam. A troca é pelo valor e ignora
+  maiúsculas/minúsculas: senha curta demais (ou contida no IMEI) gera `***` a
+  mais no histórico — use senhas de 6 caracteres ou mais;
+- os overrides saem para o admin com `***` no lugar da senha. Reenviar o
+  texto exatamente como veio mantém o original; um texto novo com `***` é
+  recusado (use a senha de verdade, ou omita `commandOverrides` no `PATCH`
+  para não mexer neles);
+- operador e visualizador veem do rastreador só identificação, situação,
+  linha e anotações — APN, usuário APN, servidor, intervalos e overrides são
+  do admin. **Configuração** (`GET /api/devices/:id/provisioning`) também é só
+  do admin, e mesmo ali os comandos sugeridos mostram `***` onde vai a senha
+  de comando (`"redacted": true`): quem envia o SMS digita a senha no lugar;
+- a auditoria registra *quais* credenciais mudaram em cada cadastro/edição
+  (`credentials: ["commandPassword", …]`), nunca os valores.
+
+> **Versões anteriores expunham essas senhas** a qualquer usuário da equipe
+> (operador e visualizador inclusive) nas leituras de rastreador, veículo e
+> histórico, e a senha de comando ia em claro para o WebSocket. A migration
+> `0012` limpa o histórico já gravado (senha atual onde estiver; senha antiga
+> na posição conhecida dos comandos GT06), mas não desfaz o que já foi visto:
+> **troque a senha de comando dos aparelhos que a usam** (no J16,
+> `RESETPWD,<atual>,<nova>#` por SMS — ver [docs/J16.md](docs/J16.md); nos
+> demais, conforme o manual) e atualize o cadastro, e troque com a operadora
+> a senha APN dos chips que tinham senha cadastrada.
+
 > **Aparelhos H02 (linha TKSTAR) costumam reportar um identificador curto**, de
 > 10 dígitos, e não o IMEI de 15. Cadastre exatamente o que o aparelho manda.
 > Para descobrir qual é, deixe-o conectar uma vez e rode
@@ -486,6 +525,10 @@ go run ./cmd/tksim \
 
 Cadastre esse IMEI no painel antes, senão a conexão é recusada (que é o
 comportamento correto).
+
+Com `--echo` o simulador repete na resposta o comando que recebeu, senha
+inclusa, como alguns firmwares fazem — serve para conferir que o histórico e o
+tempo real mostram `***` no lugar dela.
 
 O simulador aceita comandos pela entrada padrão enquanto roda:
 
@@ -658,12 +701,13 @@ POST   /api/vehicles/:id/commands/request-position (operator+)
 POST   /api/vehicles/:id/commands/request-status   (operator+)
 POST   /api/vehicles/:id/commands                  (operator+; CUSTOM é admin)
 
-GET    /api/devices
+GET    /api/devices                      (equipe) sem senhas; config. só para o admin
 POST   /api/devices                      (admin)
-GET    /api/devices/:id
-GET    /api/devices/:id/status
-GET    /api/devices/:id/provisioning     comandos de configuração sugeridos
-PATCH  /api/devices/:id                  (admin)
+GET    /api/devices/:id                  (equipe)
+GET    /api/devices/:id/status           (equipe)
+GET    /api/devices/:id/commands         (equipe) histórico, senha como ***
+GET    /api/devices/:id/provisioning     (admin) comandos de configuração sugeridos
+PATCH  /api/devices/:id                  (admin) senha vazia mantém; clear* apaga
 DELETE /api/devices/:id                  (admin)
 
 GET    /api/geofences
@@ -680,6 +724,10 @@ GET    /api/diagnostics/audit-logs       (admin)
 
 GET    /ws?token=<accessToken>           tempo real
 ```
+
+Nenhuma resposta traz a senha APN nem a senha de comando dos rastreadores, e
+o `payload`/`response` dos comandos (histórico e WebSocket) vem com a senha
+trocada por `***` — ver [Credenciais dos rastreadores](#credenciais-dos-rastreadores).
 
 ### Por quanto tempo o histórico é guardado
 
@@ -800,6 +848,11 @@ Testes:
 cd backend
 go test ./...          # parsers, enquadramento TCP, regra de corte
 go vet ./...
+
+# Com um Postgres descartável, roda também o teste de ponta a ponta das
+# credenciais (API + WebSocket + migration); ele cria e apaga um schema próprio.
+FARBO_TEST_DATABASE_URL='postgres://usuario:senha@localhost:5432/banco?sslmode=disable' \
+  go test ./internal/api/ -run 'TestCredentials|TestMigration'
 
 cd frontend
 npm test               # validação dos eventos do WebSocket, marcador do mapa
