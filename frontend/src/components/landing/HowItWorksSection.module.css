@@ -39,7 +39,10 @@
 .stepsGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 2rem;
+  gap: 1.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
 .stepCard {
@@ -57,12 +60,49 @@
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
 }
 
+.stepTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
 .stepNumber {
   font-size: 3.5rem;
   font-weight: 900;
   color: rgba(59, 229, 88, 0.25);
   line-height: 1;
-  margin-bottom: 1rem;
+}
+
+/* Quem faz a etapa: você, a Farbo ou o prestador parceiro. */
+.actor {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.actor_voce {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.actor_farbo {
+  color: var(--color-neon-green);
+  background: rgba(59, 229, 88, 0.1);
+  border-color: rgba(59, 229, 88, 0.3);
+}
+
+.actor_parceiro {
+  color: #f0b43c;
+  background: rgba(240, 180, 60, 0.1);
+  border-color: rgba(240, 180, 60, 0.3);
 }
 
 .stepTitle {
@@ -78,8 +118,22 @@
   color: #94a3b8;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
+  .stepsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
   .stepsGrid {
     grid-template-columns: 1fr;
+  }
+
+  .title {
+    font-size: 2rem;
+  }
+
+  .stepCard {
+    padding: 2rem 1.5rem;
   }
 }
