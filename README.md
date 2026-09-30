@@ -76,15 +76,35 @@ Requisitos: Docker e Docker Compose.
 ```bash
 cp .env.example .env
 
-# Gere um segredo de verdade para o JWT:
-openssl rand -base64 48
+# Os segredos vêm vazios: cada instalação gera os seus. Isto preenche os
+# quatro que o compose exige com valores sorteados (só os que estão vazios):
+for var in POSTGRES_PASSWORD REDIS_PASSWORD JWT_SECRET GRAFANA_PASSWORD; do
+  sed -i "s|^$var=\$|$var=$(openssl rand -base64 48 | tr -d '\n')|" .env
+done
 
-# Edite .env: POSTGRES_PASSWORD, REDIS_PASSWORD, GRAFANA_PASSWORD, JWT_SECRET,
-# ADMIN_EMAIL, ADMIN_PASSWORD (o compose não sobe sem as quatro primeiras)
+# Falta o primeiro acesso: ADMIN_EMAIL (o seu e-mail) e ADMIN_PASSWORD (uma
+# senha só sua, 10+ caracteres). Ajuste também CORS_ORIGINS e APP_URL.
 nano .env
 
 docker compose up -d --build
 ```
+
+Sem `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `JWT_SECRET` ou `GRAFANA_PASSWORD` o
+compose nem começa (não há valor padrão para segredo). Com `APP_ENV=production`
+(o padrão) o backend ainda confere os valores **antes** de abrir o banco e as
+portas, e recusa com uma mensagem dizendo qual variável trocar:
+
+- valor de exemplo ou padrão conhecido (`admin`, `changeme`, `secret`, os
+  antigos `troque-...` do `.env.example` etc. — a lista fica em
+  [`backend/internal/config/placeholders.txt`](backend/internal/config/placeholders.txt));
+- `JWT_SECRET` com menos de 32 caracteres ou que claramente não foi sorteado
+  (poucos caracteres diferentes, repetição, sequência). Isso não mede
+  entropia: gere com `openssl rand -base64 48`;
+- o mesmo valor em dois segredos (ex.: senha do banco igual ao `JWT_SECRET`);
+- `REDIS_PASSWORD` vazio com `REDIS_ENABLED=true`.
+
+Com `APP_ENV=development` (ou `test`) o backend só avisa no log — nunca use
+assim num servidor.
 
 Sobe seis serviços:
 
@@ -116,13 +136,56 @@ curl http://localhost:8080/health
 curl http://localhost:8080/ready
 ```
 
+### Trocando os segredos
+
+Troque quando um valor vazar, quando uma pessoa com acesso sair, ou se o seu
+`.env` ainda tem algum valor do exemplo antigo (a versão atual do backend nem
+sobe com eles). Gere cada valor novo com `openssl rand -base64 48` (ou `32`).
+
+Depois de editar o `.env`, `docker compose up -d` recria só os serviços cuja
+configuração mudou.
+
+**`JWT_SECRET`** — troque no `.env` e `docker compose up -d`. Todas as
+sessões caem e todo mundo entra de novo: os access tokens antigos param de
+valer na hora (assinatura) e os refresh tokens do segredo anterior são
+recusados e revogados na subida (o log diz quantos). Com várias instâncias,
+todas precisam do mesmo valor. O token do Melhor Envios fica cifrado com uma
+chave derivada dele: depois da troca, **Pedidos → Conectar Melhor Envios** de
+novo.
+
+**`POSTGRES_PASSWORD`** — o PostgreSQL só lê a variável ao criar o volume;
+trocar só o `.env` não muda a senha do banco. Primeiro no banco (o `\password`
+pede a senha sem mostrar e não a deixa no histórico), depois no `.env`:
+
+```bash
+# POSTGRES_USER e POSTGRES_DB do .env (padrão: tracker)
+docker compose exec postgres psql -U tracker -d tracker -c '\password tracker'
+# agora POSTGRES_PASSWORD=<a mesma senha> no .env, e:
+docker compose up -d
+```
+
+**`REDIS_PASSWORD`** — não fica gravada em lugar nenhum: troque no `.env` e
+`docker compose up -d` (recria o Redis e o backend).
+
+**`ADMIN_PASSWORD`** só vale para criar o primeiro acesso. Para trocar a senha
+de quem já existe, use **Esqueci minha senha** (a troca encerra as sessões
+dessa pessoa).
+
+Se algum valor do exemplo chegou a rodar num servidor acessível, trate como
+vazado: troque-o como acima, confira em **Usuários** se não surgiu
+administrador desconhecido e revise a auditoria e os logs do período. O
+histórico do git guarda os exemplos antigos, mas eles eram só exemplos — nada
+de reescrever o histórico; o que importa é nenhum servidor usá-los.
+
 ---
 
 ## Primeiro acesso
 
 O usuário administrador é criado na primeira subida a partir de `ADMIN_EMAIL` e
 `ADMIN_PASSWORD` — e **só** se o banco estiver sem nenhum usuário. Abra
-<http://localhost:3000> e entre com essas credenciais.
+<http://localhost:3000> e entre com essas credenciais. E-mail ou senha de
+exemplo nunca viram administrador, em nenhum `APP_ENV`: a subida falha sem
+criar ninguém. Depois do primeiro acesso, `ADMIN_PASSWORD` pode ficar vazio.
 
 Perfis disponíveis:
 
@@ -830,7 +893,8 @@ Requisitos: Go 1.27 e Node 22.
 # Banco e cache apenas
 docker compose up -d postgres redis
 
-# Backend
+# Backend. Sem APP_ENV vale development: segredo de exemplo só gera aviso no
+# log (JWT_SECRET ainda precisa de 32+ caracteres: openssl rand -base64 48).
 cd backend
 export POSTGRES_PASSWORD=... JWT_SECRET=... ADMIN_EMAIL=... ADMIN_PASSWORD=...
 export REDIS_ENABLED=true REDIS_PASSWORD=...   # a mesma do .env
@@ -875,8 +939,12 @@ mais importam:
 | `TCP_IDENTIFY_TIMEOUT` | `30s` | conexão que não faz login nesse prazo é derrubada |
 | `TCP_MAX_PENDING_PER_IP` | `100` | conexões sem login aceitas de um mesmo IP |
 | `TRUSTED_PROXIES` | redes privadas | de quem o `X-Forwarded-For` é aceito; com proxy HTTPS na frente, ponha o IP dele |
-| `REDIS_PASSWORD` | — | obrigatória no compose |
+| `APP_ENV` | `production` no compose, `development` fora dele | fora de `development`/`test`, segredo de exemplo, óbvio ou repetido impede a subida |
+| `JWT_SECRET` | — | obrigatório; 32+ caracteres sorteados (`openssl rand -base64 48`); trocar encerra todas as sessões |
+| `POSTGRES_PASSWORD` | — | obrigatória; trocar exige `\password` no banco ([Trocando os segredos](#trocando-os-segredos)) |
+| `REDIS_PASSWORD` | — | obrigatória no compose e com `REDIS_ENABLED=true` |
 | `GRAFANA_PASSWORD` | — | obrigatória no compose |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | vazio | primeiro acesso, só com o banco sem usuários; exemplos são recusados |
 | `ENGINE_CUT_MAX_SPEED_KMH` | `5` | acima disso o corte é recusado |
 | `ENGINE_CUT_MAX_POSITION_AGE` | `10m` | posição mais velha recusa o corte |
 | `COMMAND_ACK_TIMEOUT` | `15s` | sem resposta, o comando vira `TIMEOUT` |

@@ -7,7 +7,9 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-tracker}
       POSTGRES_USER: ${POSTGRES_USER:-tracker}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      # Sem valor padrão de propósito: o compose não sobe sem ela. O backend
+      # ainda recusa valores de exemplo (ver backend/internal/config/secrets.go).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env (openssl rand -base64 32)}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     # Só na máquina (ex.: túnel SSH para administrar). O backend fala com o
@@ -34,9 +36,9 @@ services:
       - --loglevel
       - warning
       - --requirepass
-      - ${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env}
+      - ${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env (openssl rand -base64 32)}
     environment:
-      REDISCLI_AUTH: ${REDIS_PASSWORD}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env (openssl rand -base64 32)}
     volumes:
       - redis-data:/data
     ports:
@@ -67,14 +69,16 @@ services:
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-tracker}
       POSTGRES_USER: ${POSTGRES_USER:-tracker}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env (openssl rand -base64 32)}
 
       REDIS_ENABLED: ${REDIS_ENABLED:-true}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env (openssl rand -base64 32)}
 
-      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env}
+      # Com APP_ENV=production (o padrão acima) o backend recusa segredo de
+      # exemplo, óbvio ou repetido antes de abrir o banco e as portas.
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env (openssl rand -base64 48)}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       # Proxies cujo X-Forwarded-For é aceito para saber o IP do cliente
       # (limite de login, auditoria). O padrão cobre as redes privadas, onde
@@ -139,7 +143,8 @@ services:
       MELHORENVIO_FROM_CITY: ${MELHORENVIO_FROM_CITY:-}
       MELHORENVIO_FROM_STATE: ${MELHORENVIO_FROM_STATE:-}
 
-      # Primeiro acesso: criado apenas se não houver nenhum usuário.
+      # Primeiro acesso: criado apenas se não houver nenhum usuário, e nunca
+      # com o e-mail ou a senha de exemplo.
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       ADMIN_NAME: ${ADMIN_NAME:-Administrador}

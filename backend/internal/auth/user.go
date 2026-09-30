@@ -128,10 +128,11 @@ func (r *Repository) Count(ctx context.Context) (int, error) {
 // ---------------------------------------------------------------------------
 
 // StoreRefreshToken guarda apenas o hash: o valor em claro fica só no cliente.
-func (r *Repository) StoreRefreshToken(ctx context.Context, userID uuid.UUID, tokenHash string, expiresAt time.Time, userAgent string) error {
+// keyID identifica o JWT_SECRET em uso (ver signingKeyID).
+func (r *Repository) StoreRefreshToken(ctx context.Context, userID uuid.UUID, tokenHash, keyID string, expiresAt time.Time, userAgent string) error {
 	_, err := r.db.Exec(ctx, `
-		INSERT INTO refresh_tokens (user_id, token_hash, expires_at, user_agent)
-		VALUES ($1, $2, $3, $4)`, userID, tokenHash, expiresAt, userAgent)
+		INSERT INTO refresh_tokens (user_id, token_hash, key_id, expires_at, user_agent)
+		VALUES ($1, $2, $3, $4, $5)`, userID, tokenHash, keyID, expiresAt, userAgent)
 	return database.MapError(err)
 }
 
@@ -141,13 +142,14 @@ type refreshRecord struct {
 }
 
 // ConsumeRefreshToken valida e revoga o token numa única operação, de modo que
-// um refresh token só possa ser usado uma vez (rotação).
-func (r *Repository) ConsumeRefreshToken(ctx context.Context, tokenHash string) (*refreshRecord, error) {
+// um refresh token só possa ser usado uma vez (rotação). Token emitido com
+// outro JWT_SECRET (keyID diferente) não vale.
+func (r *Repository) ConsumeRefreshToken(ctx context.Context, tokenHash, keyID string) (*refreshRecord, error) {
 	var rec refreshRecord
 	err := r.db.QueryRow(ctx, `
 		UPDATE refresh_tokens SET revoked_at = NOW()
-		WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > NOW()
-		RETURNING id, user_id`, tokenHash).Scan(&rec.ID, &rec.UserID)
+		WHERE token_hash = $1 AND key_id = $2 AND revoked_at IS NULL AND expires_at > NOW()
+		RETURNING id, user_id`, tokenHash, keyID).Scan(&rec.ID, &rec.UserID)
 	if err != nil {
 		return nil, database.MapError(err)
 	}
@@ -166,6 +168,17 @@ func (r *Repository) RevokeAllForUser(ctx context.Context, userID uuid.UUID) err
 		`UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`,
 		userID)
 	return database.MapError(err)
+}
+
+// RevokeRefreshTokensNotSignedBy revoga as sessões abertas com outro
+// JWT_SECRET (ou de antes de a chave ser gravada, com key_id vazio).
+func (r *Repository) RevokeRefreshTokensNotSignedBy(ctx context.Context, keyID string) (int64, error) {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE refresh_tokens SET revoked_at = NOW() WHERE revoked_at IS NULL AND key_id <> $1`, keyID)
+	if err != nil {
+		return 0, database.MapError(err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 // DeleteExpiredRefreshTokens limpa a tabela periodicamente.

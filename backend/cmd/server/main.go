@@ -65,6 +65,12 @@ func run() error {
 	log := telemetry.NewLogger(cfg.Telemetry.LogLevel, cfg.Telemetry.LogFormat)
 	slog.SetDefault(log)
 	telemetry.SetMaskIMEI(cfg.Telemetry.MaskIMEI)
+	// Segredo de exemplo, óbvio ou repetido: fora do desenvolvimento
+	// config.Load já recusou; aqui só chega com APP_ENV=development/test.
+	for _, problem := range cfg.Warnings {
+		log.Warn("SEGREDO INSEGURO — aceito só porque APP_ENV="+cfg.Env+"; nunca use assim em produção",
+			"problema", problem)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -159,6 +165,10 @@ func run() error {
 		return err
 	}
 	authSvc := auth.NewService(userRepo, cfg.Auth, mail.NewAccountMailer(mailer, cfg.Mail.AppURL), log)
+	// JWT_SECRET trocado: as sessões abertas com o anterior acabam aqui.
+	if err := authSvc.RevokeSessionsFromOldKeys(ctx); err != nil {
+		return err
+	}
 	if err := authSvc.EnsureBootstrapUser(ctx, cfg.Bootstrap); err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -48,10 +49,16 @@ type Tokens struct {
 
 type Service struct {
 	repo     *Repository
+	users    userStore
+	sessions sessionStore
 	resets   resetStore
 	notifier Notifier
 	cfg      config.Auth
 	log      *slog.Logger
+
+	// keyID identifica o JWT_SECRET atual (ver signingKeyID). Cada refresh
+	// token é gravado com ele e só é aceito enquanto o segredo for o mesmo.
+	keyID string
 
 	// runAsync dispara os e-mails fora da requisição; os testes trocam por
 	// uma chamada síncrona.
@@ -64,12 +71,64 @@ func NewService(repo *Repository, cfg config.Auth, notifier Notifier, log *slog.
 	}
 	return &Service{
 		repo:     repo,
+		users:    repo,
+		sessions: repo,
 		resets:   repo,
 		notifier: notifier,
 		cfg:      cfg,
 		log:      log.With("component", "auth"),
+		keyID:    signingKeyID(cfg.JWTSecret),
 		runAsync: func(f func()) { go f() },
 	}
+}
+
+// userStore é o que o cadastro e o primeiro acesso precisam do banco. O
+// *Repository implementa; os testes usam um dublê em memória.
+type userStore interface {
+	Count(ctx context.Context) (int, error)
+	Create(ctx context.Context, u *User) error
+}
+
+// sessionStore guarda os refresh tokens (as sessões). O *Repository
+// implementa; os testes usam um dublê em memória.
+type sessionStore interface {
+	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
+	StoreRefreshToken(ctx context.Context, userID uuid.UUID, tokenHash, keyID string, expiresAt time.Time, userAgent string) error
+	ConsumeRefreshToken(ctx context.Context, tokenHash, keyID string) (*refreshRecord, error)
+	RevokeRefreshTokensNotSignedBy(ctx context.Context, keyID string) (int64, error)
+}
+
+// signingKeyID identifica o JWT_SECRET sem revelá-lo: é um HMAC com o
+// próprio segredo como chave, sobre um rótulo fixo — o mesmo que qualquer JWT
+// emitido já é. Quem lê o banco não ganha nada que um token não dê.
+func signingKeyID(secret []byte) string {
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte("farbo:refresh-token-signing-key:v1"))
+	return hex.EncodeToString(mac.Sum(nil))[:32]
+}
+
+// RevokeSessionsFromOldKeys encerra as sessões abertas com outro JWT_SECRET.
+// Roda na subida, antes de a API atender.
+//
+// Os access tokens antigos param de valer sozinhos quando o segredo muda (a
+// assinatura não confere mais). Os refresh tokens, não: são opacos e ficam no
+// banco. Sem isto, quem roubou um refresh token continuaria renovando o acesso
+// depois da troca do segredo feita justamente para cortá-lo. Refresh já recusa
+// token de outra chave; aqui eles também saem como revogados no banco.
+//
+// Sessões de antes desta regra não têm chave gravada: não dá para saber com
+// que segredo foram abertas, então também são encerradas (uma vez só, na
+// primeira subida desta versão).
+func (s *Service) RevokeSessionsFromOldKeys(ctx context.Context) error {
+	revoked, err := s.sessions.RevokeRefreshTokensNotSignedBy(ctx, s.keyID)
+	if err != nil {
+		return fmt.Errorf("encerrando sessões de outro JWT_SECRET: %w", err)
+	}
+	if revoked > 0 {
+		s.log.Warn("sessões abertas com outro JWT_SECRET foram encerradas; os usuários precisam entrar de novo",
+			"sessoes", revoked)
+	}
+	return nil
 }
 
 // PasswordError explica por que uma senha foi recusada. A mensagem é para
@@ -120,7 +179,7 @@ func (s *Service) Login(ctx context.Context, email, password, userAgent string) 
 
 // Refresh troca um refresh token válido por um novo par (rotação de token).
 func (s *Service) Refresh(ctx context.Context, refreshToken, userAgent string) (*Tokens, error) {
-	record, err := s.repo.ConsumeRefreshToken(ctx, hashToken(refreshToken))
+	record, err := s.sessions.ConsumeRefreshToken(ctx, hashToken(refreshToken), s.keyID)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return nil, ErrInvalidToken
@@ -128,7 +187,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken, userAgent string) (
 		return nil, err
 	}
 
-	user, err := s.repo.GetByID(ctx, record.UserID)
+	user, err := s.sessions.GetByID(ctx, record.UserID)
 	if err != nil {
 		return nil, ErrInvalidToken
 	}
@@ -168,7 +227,7 @@ func (s *Service) issue(ctx context.Context, user *User, userAgent string) (*Tok
 	if err != nil {
 		return nil, err
 	}
-	if err := s.repo.StoreRefreshToken(ctx, user.ID, hashToken(refresh),
+	if err := s.sessions.StoreRefreshToken(ctx, user.ID, hashToken(refresh), s.keyID,
 		time.Now().Add(s.cfg.RefreshTokenTTL), userAgent); err != nil {
 		return nil, err
 	}
@@ -250,7 +309,7 @@ func (s *Service) Register(ctx context.Context, in NewUser) (*User, error) {
 		Email: email, Name: name, Role: role, PasswordHash: hash, Active: true,
 		Phone: strings.TrimSpace(in.Phone), Document: strings.TrimSpace(in.Document),
 	}
-	if err := s.repo.Create(ctx, user); err != nil {
+	if err := s.users.Create(ctx, user); err != nil {
 		return nil, err
 	}
 	return user, nil
@@ -271,8 +330,13 @@ func (s *Service) UpdateProfile(ctx context.Context, id uuid.UUID, p Profile) (*
 func RandomPassword() (string, error) { return newOpaqueToken() }
 
 // EnsureBootstrapUser cria o primeiro administrador quando o banco está vazio.
+//
+// Nunca com o e-mail ou a senha de exemplo, em nenhum ambiente: a senha do
+// .env.example é pública, e o primeiro administrador criado com ela seria de
+// quem a lesse primeiro. Nesse caso a subida falha sem criar ninguém. (Fora
+// do desenvolvimento config.Load já recusa esses valores antes disto.)
 func (s *Service) EnsureBootstrapUser(ctx context.Context, cfg config.Bootstrap) error {
-	count, err := s.repo.Count(ctx)
+	count, err := s.users.Count(ctx)
 	if err != nil {
 		return err
 	}
@@ -283,6 +347,14 @@ func (s *Service) EnsureBootstrapUser(ctx context.Context, cfg config.Bootstrap)
 		s.log.Warn("nenhum usuário cadastrado e ADMIN_EMAIL/ADMIN_PASSWORD não definidos; " +
 			"defina as variáveis para criar o primeiro acesso")
 		return nil
+	}
+	if config.IsPlaceholder(cfg.AdminPassword) {
+		return fmt.Errorf("ADMIN_PASSWORD é a senha de exemplo ou um padrão conhecido: o administrador " +
+			"inicial não foi criado; defina uma senha própria e suba de novo")
+	}
+	if config.IsPlaceholder(cfg.AdminEmail) {
+		return fmt.Errorf("ADMIN_EMAIL é o e-mail de exemplo: o administrador inicial não foi criado; " +
+			"use o e-mail real de quem administra e suba de novo")
 	}
 
 	user, err := s.CreateUser(ctx, cfg.AdminEmail, cfg.AdminName, RoleAdmin, cfg.AdminPassword)

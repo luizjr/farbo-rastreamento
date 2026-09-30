@@ -13,7 +13,11 @@ import (
 )
 
 type Config struct {
-	Env       string
+	Env string
+	// Warnings são problemas de segurança tolerados só porque o ambiente é
+	// de desenvolvimento (ver validateSecrets). O main registra no log.
+	Warnings []string
+
 	HTTP      HTTP
 	TCP       TCP
 	Postgres  Postgres
@@ -504,11 +508,8 @@ func Load() (*Config, error) {
 	}
 	cfg.HTTP.TrustedProxies = proxies
 
-	if len(cfg.Auth.JWTSecret) < 32 {
-		return nil, fmt.Errorf("JWT_SECRET é obrigatório e precisa de ao menos 32 caracteres")
-	}
-	if cfg.Postgres.Password == "" {
-		return nil, fmt.Errorf("POSTGRES_PASSWORD é obrigatório")
+	if err := cfg.validateSecrets(); err != nil {
+		return nil, err
 	}
 	if cfg.TCP.MaxPacketSize < 512 || cfg.TCP.MaxPacketSize > 1<<20 {
 		return nil, fmt.Errorf("TCP_MAX_PACKET_SIZE fora da faixa aceitável (512..1048576)")
