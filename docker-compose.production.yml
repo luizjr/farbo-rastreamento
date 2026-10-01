@@ -17,7 +17,9 @@ services:
       - traefik.http.middlewares.secure-headers.headers.stsSeconds=31536000
       - traefik.http.middlewares.secure-headers.headers.stsIncludeSubdomains=true
       - traefik.http.middlewares.secure-headers.headers.contentTypeNosniff=true
-      - traefik.http.middlewares.secure-headers.headers.referrerPolicy=same-origin
+      # Não usar same-origin: o OpenStreetMap recusa tiles sem Referer (devolve
+      # a imagem "Access blocked"). Assim vai só a origem, nunca a rota.
+      - traefik.http.middlewares.secure-headers.headers.referrerPolicy=strict-origin-when-cross-origin
       - traefik.http.middlewares.secure-headers.headers.frameDeny=true
 
   frontend:
