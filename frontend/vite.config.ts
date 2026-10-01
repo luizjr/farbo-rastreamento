@@ -7,6 +7,9 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import type { OutputBundle, OutputChunk } from 'rollup';
 
+const landingEntry = path.resolve(__dirname, 'index.html');
+const appEntry = path.resolve(__dirname, 'app/index.html');
+
 /**
  * O app do cliente (PWA) mora em /app: rotas como /app/veiculos/123 precisam
  * servir app/index.html (o fallback padrão do Vite mandaria para o painel).
@@ -34,7 +37,7 @@ function pwaServiceWorker(): Plugin {
     apply: 'build',
     generateBundle(_options, bundle: OutputBundle) {
       const chunks = Object.values(bundle).filter((f): f is OutputChunk => f.type === 'chunk');
-      const entry = chunks.find((c) => c.isEntry && c.facadeModuleId?.endsWith(path.join('app', 'index.html')));
+      const entry = chunks.find((c) => c.isEntry && c.facadeModuleId === appEntry);
       if (!entry) this.error('entrada do app (app/index.html) não encontrada no build');
 
       const files = new Set<string>();
@@ -75,8 +78,27 @@ const trustedHttps =
     ? { cert: readFileSync(path.join(certDir, 'dev-cert.pem')), key: readFileSync(path.join(certDir, 'dev-key.pem')) }
     : undefined;
 
+/**
+ * A página do site sai do build como landing.html (é o nome que o nginx de
+ * produção serve), mas a entrada continua sendo o index.html: assim o build
+ * funciona igual na máquina e no Docker, sem precisar copiar arquivo antes.
+ */
+function landingHtml(): Plugin {
+  return {
+    name: 'farbo-landing-html',
+    apply: 'build',
+    enforce: 'post',
+    generateBundle(_options, bundle: OutputBundle) {
+      const page = bundle['index.html'];
+      if (!page || page.type !== 'asset') this.error('index.html não saiu do build');
+      delete bundle['index.html'];
+      this.emitFile({ type: 'asset', fileName: 'landing.html', source: page.source });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), appRoutes(), ...(trustedHttps ? [] : [basicSsl()]), pwaServiceWorker()],
+  plugins: [react(), appRoutes(), ...(trustedHttps ? [] : [basicSsl()]), pwaServiceWorker(), landingHtml()],
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
   },
@@ -121,10 +143,7 @@ export default defineConfig({
     sourcemap: 'hidden',
     rollupOptions: {
       // Duas entradas: o painel (/) e o app do cliente (/app/).
-      input: {
-        main: path.resolve(__dirname, 'index.html'),
-        app: path.resolve(__dirname, 'app/index.html'),
-      },
+      input: { landing: landingEntry, app: appEntry },
     },
   },
 });

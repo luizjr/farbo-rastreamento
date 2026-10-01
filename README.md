@@ -327,9 +327,17 @@ geração; por isso a conclusão confere os detalhes da etiqueta
 A integração usa o **OAuth** do Melhor Envios: um aplicativo (Client ID +
 Secret) e o botão *Pedidos → Conectar Melhor Envios*, que leva à autorização e
 volta. O callback do aplicativo precisa de um domínio (o Melhor Envios não
-aceita `localhost`); em desenvolvimento, cadastre
-`http://farbo.localtest.me:5173/api/integrations/melhorenvio/callback` — o
-nome aponta para `127.0.0.1` — e use o mesmo em `MELHORENVIO_REDIRECT_URL`. O token (30 dias) é renovado sozinho e fica **cifrado** no banco. O
+aceita `localhost`) e é sempre `APP_URL` + `/api/integrations/melhorenvio/callback`:
+
+| Ambiente | Aplicativo no Melhor Envios | Callback |
+| --- | --- | --- |
+| Desenvolvimento (sandbox) | sandbox.melhorenvio.com.br, `MELHORENVIO_SANDBOX=true` | `https://farbo.localtest.me:5173/api/integrations/melhorenvio/callback` |
+| Produção | melhorenvio.com.br, `MELHORENVIO_SANDBOX=false` | `https://painel.farborastreadores.com.br/api/integrations/melhorenvio/callback` |
+
+Em desenvolvimento, `farbo.localtest.me` aponta para `127.0.0.1` e o `npm run
+dev` serve em HTTPS: use o mesmo endereço em `MELHORENVIO_REDIRECT_URL`. Em
+produção, deixe `MELHORENVIO_REDIRECT_URL` vazio (vale o padrão a partir do
+`APP_URL`). O token (30 dias) é renovado sozinho e fica **cifrado** no banco. O
 cliente recebe e-mail em dois marcos: rastreador **enviado** (com o código) e
 rastreador **chegou** (com o link dos instaladores).
 

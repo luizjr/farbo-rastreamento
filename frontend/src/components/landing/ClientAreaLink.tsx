@@ -10,7 +10,9 @@ export const MOBILE_QUERY = '(pointer: coarse) and (max-width: 1024px)';
 
 /** Destino da "Área do cliente": o app no celular, o painel no computador. */
 export function clientAreaHref(mobile: boolean): string {
-  return mobile ? '/app/' : '/login';
+  return mobile
+    ? import.meta.env.VITE_CUSTOMER_APP_URL || '/app/'
+    : import.meta.env.VITE_PANEL_URL || '/login';
 }
 
 function subscribe(onChange: () => void) {

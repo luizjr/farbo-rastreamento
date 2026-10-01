@@ -324,7 +324,11 @@ func (s *Server) handleShippingWebhook(w http.ResponseWriter, r *http.Request) {
 		Data  melhorenvio.TrackingInfo `json:"data"`
 	}
 	if err := json.Unmarshal(body, &event); err != nil || event.Data.ID == "" {
-		writeError(w, http.StatusBadRequest, "evento inválido")
+		// Assinado pelo Melhor Envios, mas sem etiqueta: é o teste que ele
+		// manda ao cadastrar o webhook (e que precisa de 200, senão o cadastro
+		// falha com E-WBH-0002). Nada a aplicar.
+		s.Log.Info("webhook do Melhor Envios sem etiqueta (teste de cadastro): ignorado", "event", event.Event)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ignorado"})
 		return
 	}
 	if err := s.Fulfillment.ApplyWebhook(r.Context(), event.Data); err != nil {

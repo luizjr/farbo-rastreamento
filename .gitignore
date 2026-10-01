@@ -1,6 +1,11 @@
 # Ambiente
 .env
 .env.local
+.env.production
+.env.smtp
+# Cópias, temporários e o exemplo do ambiente de produção: o repositório é
+# público, e mesmo o exemplo tem dados do servidor (conta de e-mail, URLs).
+.env.production.*
 *.local
 
 # Node
@@ -21,3 +26,15 @@ frontend/tsconfig.tsbuildinfo
 
 # Certificados HTTPS de desenvolvimento (frontend/scripts/dev-cert.sh)
 frontend/.certs/
+
+# Acesso SSH local
+connect-server.sh
+
+# Deploy de produção com dados do servidor (IP do VPS, acesso SSH, porta e
+# regras do firewall, nameserver, caminhos). O repositório é público: estes
+# arquivos ficam só na máquina de quem publica. O publish-to-vps.sh empacota a
+# pasta com tar (não usa o git), então ignorar aqui não afeta o deploy.
+deploy/PRODUCTION.md
+deploy/production-up.sh
+deploy/publish-to-vps.sh
+deploy/prepare-almalinux.sh
