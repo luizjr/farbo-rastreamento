@@ -52,7 +52,13 @@ export function tripWindow(range: TripRange, now = new Date()): { from: string; 
   }
 }
 
-/** Link de rota até o veículo (abre o app de mapas do celular). */
-export function directionsUrl(lat: number, lon: number): string {
-  return `https://www.google.com/maps/dir/?api=1&destination=${lat.toFixed(6)},${lon.toFixed(6)}`;
+/**
+ * Link de rota até o veículo, no app de mapas nativo: Apple Maps no iPhone,
+ * Google Maps no Android (os dois links abrem o app, se instalado).
+ */
+export function directionsUrl(lat: number, lon: number, ios = false): string {
+  const point = `${lat.toFixed(6)},${lon.toFixed(6)}`;
+  return ios
+    ? `https://maps.apple.com/?daddr=${point}&dirflg=d`
+    : `https://www.google.com/maps/dir/?api=1&destination=${point}`;
 }

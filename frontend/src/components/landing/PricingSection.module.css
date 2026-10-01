@@ -284,3 +284,39 @@
     gap: 2.5rem;
   }
 }
+
+/* Celular: cards mais compactos, foto do rastreador ao lado do preço (antes
+   ela disputava espaço com a lista) e selo da parceria legível. */
+@media (max-width: 600px) {
+  .pricingSection {
+    padding: 2rem 1rem 2.5rem;
+  }
+
+  .cardsGrid {
+    gap: 1.75rem;
+  }
+
+  .card {
+    padding: 1.75rem 1.5rem;
+  }
+
+  .equipmentCard {
+    flex-direction: column;
+  }
+
+  .equipmentImageWrapper {
+    position: absolute;
+    top: 1.5rem;
+    right: 1.25rem;
+    width: 56px;
+    margin: 0;
+  }
+
+  .partnerText {
+    font-size: 0.75rem;
+  }
+
+  .partnerText strong {
+    font-size: 0.8125rem;
+  }
+}

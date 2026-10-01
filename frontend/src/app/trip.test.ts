@@ -53,8 +53,11 @@ it('distância conhecida (~111 km por grau de latitude)', () => {
   expect(distanceMeters(at(0, 0, 0), at(1, 0, 0))).toBeLessThan(111300);
 });
 
-it('link de rota até o veículo', () => {
+it('link de rota até o veículo: Google Maps no Android, Apple Maps no iPhone', () => {
   expect(directionsUrl(-23.5505123, -46.6333789)).toBe(
     'https://www.google.com/maps/dir/?api=1&destination=-23.550512,-46.633379',
+  );
+  expect(directionsUrl(-23.5505123, -46.6333789, true)).toBe(
+    'https://maps.apple.com/?daddr=-23.550512,-46.633379&dirflg=d',
   );
 });

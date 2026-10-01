@@ -113,6 +113,10 @@ export const PricingSection: React.FC<PricingSectionProps> = ({ onOpenModal }) =
             <div className={styles.partnerFooter}>
               <img
                 src="/assets/insanos-skull.png"
+                width={44}
+                height={48}
+                loading="lazy"
+                decoding="async"
                 alt="Insanos MC Logo"
                 className={styles.partnerLogo}
               />
@@ -168,6 +172,10 @@ export const PricingSection: React.FC<PricingSectionProps> = ({ onOpenModal }) =
             <div className={styles.equipmentImageWrapper}>
               <img
                 src="/assets/tracker-gt06.png"
+                width={135}
+                height={325}
+                loading="lazy"
+                decoding="async"
                 alt="Rastreador J16 GT06"
                 className={styles.trackerImg}
               />

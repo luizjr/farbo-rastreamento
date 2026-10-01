@@ -73,12 +73,58 @@
   }
 }
 
+/* No celular a janela vira um painel que sobe de baixo (como os "sheets"
+   do iOS e do Android): fica ao alcance do polegar e respeita a barra de
+   gestos (safe area). */
 @media (max-width: 480px) {
+  .backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .dialog {
+    max-width: none;
+    /* Relativo ao fundo (fixo na tela toda): no iPhone instalado o dvh é
+       menor que a tela. */
+    max-height: calc(100% - env(safe-area-inset-top) - var(--space-4));
+    border-bottom: 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    animation: sheet 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  /* Alça: indica que é um painel. */
+  .dialog::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 5px;
+    margin: var(--space-2) auto 0;
+    border-radius: var(--radius-full);
+    background: var(--border-strong);
+  }
+
+  .dialog > :last-child {
+    padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+  }
+
   .footer {
     flex-direction: column-reverse;
   }
 
   .footer > * {
     width: 100%;
+  }
+}
+
+@keyframes sheet {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop,
+  .dialog {
+    animation: none;
   }
 }

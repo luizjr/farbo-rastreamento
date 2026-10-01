@@ -41,18 +41,40 @@ export function LoginScreen() {
         <p className={styles.lead}>Entre com o e-mail e a senha da sua conta Farbo.</p>
       </div>
       <form className={styles.form} onSubmit={submit}>
-        <TextField label="E-mail" type="email" autoComplete="email" inputMode="email" required
-          value={email} onChange={(e) => setEmail(e.target.value)} />
-        <TextField label="Senha" type="password" autoComplete="current-password" required
-          value={password} onChange={(e) => setPassword(e.target.value)} />
+        <TextField
+          label="E-mail"
+          type="email"
+          name="email"
+          autoComplete="username"
+          inputMode="email"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="next"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <TextField
+          label="Senha"
+          type="password"
+          name="password"
+          autoComplete="current-password"
+          enterKeyHint="go"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
         {error && <p className={styles.error} role="alert">{error}</p>}
-        <Button type="submit" size="large" block loading={busy}>
+        <Button type="submit" variant="primary" size="large" block loading={busy}>
           Entrar
         </Button>
       </form>
-      <a className={styles.link} href="/esqueci-senha">
-        Esqueci minha senha
-      </a>
+      <div className={styles.loginFooter}>
+        <a className={styles.link} href="/esqueci-senha">
+          Esqueci minha senha
+        </a>
+      </div>
     </div>
   );
 }

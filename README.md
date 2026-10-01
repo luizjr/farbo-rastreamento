@@ -548,10 +548,46 @@ numa interface pensada para o celular:
   (Google, Mozilla, Apple, Microsoft), para um cliente não conseguir apontá-lo
   para a rede interna.
 
-Em desenvolvimento (`npm run dev`) o app abre em
-<http://localhost:5173/app/>, mas sem service worker: o modo offline e as
-notificações só existem no build (`npm run build` + nginx ou `vite preview`),
-servido em HTTPS ou em `localhost`.
+No celular, o app se comporta como app nativo:
+- **Aparência:** barras translúcidas e mapa em tela cheia.
+- **Lista de veículos:** desliza sobre o mapa e para em três posições.
+- **Atualizar:** puxar a tela para baixo busca os dados de novo.
+- **Transições:** abrir um veículo desliza da direita; voltar desliza da esquerda.
+- **Janelas:** sobem de baixo.
+- **Toque:** campos com 16 px (o iPhone não dá zoom ao tocar) e alvos de toque de 44 px.
+- **Abertura do iPhone:** tem tela própria (`public/app/splash/`, gerada por
+  `node scripts/pwa-icons.mjs` junto com os ícones).
+
+**Testar no celular (desenvolvimento).** O `npm run dev` serve em HTTPS.
+Com o celular no mesmo Wi-Fi, abra `https://<IP-da-máquina>:5173/app/`; o
+Vite mostra os endereços ao subir.
+
+- **Sem certificado confiável:** o Vite usa um certificado provisório
+  (`@vitejs/plugin-basic-ssl`). O app abre depois do aviso ("Mostrar detalhes
+  → visitar este site"). Ao **Adicionar à Tela de Início**, porém, o iPhone
+  não baixa o ícone nem as telas de abertura e mostra só a inicial do nome.
+- **Com certificado confiável (recomendado para o iPhone):**
+  1. Rode `npm run dev:cert` (em `frontend/`). Ele cria em `frontend/.certs`,
+     fora do git, uma autoridade de desenvolvimento e o certificado do
+     servidor. A autoridade **só vale para endereços de rede local e
+     `localhost`**: não serve para interceptar sites da internet.
+  2. Leve `frontend/.certs/farbo-dev-ca.crt` ao iPhone e instale o perfil em
+     **Ajustes → Geral → VPN e Gerenciamento de Dispositivos**.
+  3. Ative a confiança em **Ajustes → Geral → Sobre → Ajustes de Confiança de
+     Certificados**.
+  4. Reinicie o `npm run dev`; o Vite passa a usar esse certificado.
+  5. Apague o ícone antigo e adicione o app de novo à Tela de Início.
+  6. Para tirar depois, remova o perfil em VPN e Gerenciamento de
+     Dispositivos.
+
+O WebSocket funciona pelo IP porque o proxy do Vite apresenta ao backend a
+origem cadastrada (`http://localhost:5173`) quando a página é dele mesmo.
+
+**Limite do modo de desenvolvimento:**
+- não há service worker, então não há modo offline nem notificações;
+- esses dois recursos precisam do build (`npm run build` + `npx vite preview
+  --host`, que usa o mesmo certificado);
+- o iPhone só registra service worker com certificado confiável.
 
 ---
 

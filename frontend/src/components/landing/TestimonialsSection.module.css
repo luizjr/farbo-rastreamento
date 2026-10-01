@@ -114,3 +114,45 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Celular: carrossel de deslizar para o lado, com o próximo depoimento
+   aparecendo na borda (convite para deslizar), em vez de 3 cards empilhados. */
+@media (max-width: 700px) {
+  .section {
+    padding: 3rem 0 2.5rem;
+  }
+
+  .header {
+    padding: 0 1rem;
+    margin-bottom: 1.75rem;
+  }
+
+  .title {
+    font-size: 1.75rem;
+  }
+
+  .subtitle {
+    font-size: 1rem;
+  }
+
+  .grid {
+    display: flex;
+    gap: 0.875rem;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding: 0 1rem;
+    padding: 0.25rem 1rem 0.75rem;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .card {
+    flex: 0 0 86%;
+    scroll-snap-align: start;
+  }
+}

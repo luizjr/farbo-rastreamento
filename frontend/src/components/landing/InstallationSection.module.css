@@ -188,3 +188,34 @@
   background: var(--color-neon-green-hover);
   transform: translateY(-1px);
 }
+
+/* Celular: as três fotos lado a lado, pequenas (elas são pequenas: ampliadas
+   para a largura da tela ficavam borradas e ocupavam 700px). */
+@media (max-width: 600px) {
+  .installationSection {
+    padding: 1.5rem 1rem 2.5rem;
+  }
+
+  .outerCard {
+    padding: 1.25rem;
+  }
+
+  .imagesColumn {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+
+  .imageCard {
+    aspect-ratio: 1;
+    border-radius: 12px;
+  }
+
+  .installersNote {
+    padding: 1rem;
+  }
+
+  .installersBtn {
+    width: 100%;
+    min-height: 48px;
+  }
+}

@@ -18,6 +18,12 @@ export const Footer: React.FC = () => {
               ) : (
                 <img
                   src="/assets/logo-header.png"
+                  srcSet="/assets/logo-header-480.png 480w, /assets/logo-header.png 956w"
+                  sizes="220px"
+                  width={956}
+                  height={176}
+                  loading="lazy"
+                  decoding="async"
                   alt="Farbo Rastreadores"
                   className={styles.logoImg}
                   onError={() => setLogoError(true)}

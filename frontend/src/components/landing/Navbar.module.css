@@ -178,13 +178,21 @@
   display: none;
   flex-direction: column;
   justify-content: space-between;
-  width: 28px;
-  height: 20px;
+  /* Área de toque de 44×44 (o desenho continua com 24×18). */
+  width: 44px;
+  height: 44px;
+  margin-right: -10px;
   background: transparent;
   border: none;
-  padding: 0;
+  padding: 13px 10px;
   cursor: pointer;
   z-index: 1001;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Fundo escurecido atrás do menu aberto: tocar fora fecha. */
+.backdrop {
+  display: none;
 }
 
 .bar {
@@ -197,31 +205,52 @@
 
 /* Responsive Mobile Navigation */
 @media (max-width: 960px) {
+  /* Menu lateral. Fechado, fica fora da tela e também fora do alcance do
+     teclado e do leitor de tela (visibility: hidden). */
   .nav {
     position: fixed;
     top: 0;
-    right: -100%;
-    width: 280px;
-    height: 100vh;
+    right: 0;
+    width: min(300px, 84vw);
+    height: 100dvh;
+    overflow-y: auto;
     background: #0d130e;
     border-left: 1px solid rgba(255, 255, 255, 0.1);
     flex-direction: column;
-    align-items: flex-start;
-    padding: 6rem 2rem 2rem 2rem;
-    gap: 1.5rem;
+    align-items: stretch;
+    padding: calc(5rem + env(safe-area-inset-top)) 1.5rem calc(2rem + env(safe-area-inset-bottom));
+    gap: 0;
     box-shadow: -10px 0 30px rgba(0, 0, 0, 0.8);
-    transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: translateX(100%);
+    visibility: hidden;
+    transition:
+      transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+      visibility 0s linear 0.3s;
+    z-index: 1;
   }
 
   .navOpen {
-    right: 0;
+    transform: none;
+    visibility: visible;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+    animation: fadeIn 0.25s ease;
   }
 
   .nav a {
-    font-size: 1.125rem;
+    display: flex;
+    align-items: center;
+    min-height: 52px;
+    font-size: 1.0625rem;
     width: 100%;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
   .ctaButton,
@@ -260,7 +289,7 @@
   }
 
   .bar1Open {
-    transform: translateY(8.5px) rotate(45deg);
+    transform: translateY(7.75px) rotate(45deg);
   }
 
   .bar2Open {
@@ -268,6 +297,26 @@
   }
 
   .bar3Open {
-    transform: translateY(-8.5px) rotate(-45deg);
+    transform: translateY(-7.75px) rotate(-45deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .header {
+    padding: 0.75rem 1rem;
+  }
+
+  .logoLink {
+    min-height: 44px;
+  }
+
+  .headerScrolled {
+    padding: 0.5rem 1rem;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
   }
 }

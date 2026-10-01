@@ -84,18 +84,30 @@ export const InstallationSection: React.FC<InstallationSectionProps> = ({ onOpen
             <div className={styles.imagesColumn}>
               <div className={styles.imageCard}>
                 <img
+                  width={140}
+                  height={150}
+                  loading="lazy"
+                  decoding="async"
                   src="/assets/installation-1.png"
                   alt="Instalação profissional em moto"
                 />
               </div>
               <div className={styles.imageCard}>
                 <img
+                  width={140}
+                  height={150}
+                  loading="lazy"
+                  decoding="async"
                   src="/assets/installation-2.png"
                   alt="Técnico realizando conexão elétrica"
                 />
               </div>
               <div className={styles.imageCard}>
                 <img
+                  width={140}
+                  height={150}
+                  loading="lazy"
+                  decoding="async"
                   src="/assets/installation-3.png"
                   alt="Instalação de rastreador em bateria automotiva"
                 />

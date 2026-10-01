@@ -15,7 +15,14 @@
     border-color var(--transition-fast),
     box-shadow var(--transition-fast),
     color var(--transition-fast),
-    opacity var(--transition-fast);
+    opacity var(--transition-fast),
+    transform var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* O botão "afunda" um pouco ao ser tocado, como nos apps nativos. */
+.button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .button:disabled {
@@ -94,5 +101,30 @@
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Toque: 44px é o mínimo confortável para o dedo (Apple e Google). */
+@media (pointer: coarse) {
+  .button {
+    height: 44px;
+    padding: 0 var(--space-5);
+    font-size: var(--text-base);
+  }
+
+  .small {
+    height: 36px;
+    padding: 0 var(--space-4);
+    font-size: var(--text-sm);
+  }
+
+  .large {
+    height: 52px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button:active:not(:disabled) {
+    transform: none;
   }
 }

@@ -129,3 +129,51 @@
     text-align: center;
   }
 }
+
+/* Celular: marca em cima, colunas de links lado a lado, e links com altura
+   boa para o dedo. */
+@media (max-width: 600px) {
+  .footer {
+    padding: 2.5rem 1rem calc(1.5rem + env(safe-area-inset-bottom));
+  }
+
+  .topRow {
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem 1rem;
+  }
+
+  .brandCol,
+  .linksCol:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .linksCol h4 {
+    margin-bottom: 0.5rem;
+  }
+
+  .linksCol ul {
+    gap: 0;
+  }
+
+  .linksCol li {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+  }
+
+  .linksCol a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+
+  .legalLinks a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .bottomBar {
+    gap: 0.25rem;
+  }
+}

@@ -1,22 +1,55 @@
-/* Ajustes do app instalado: sem "puxar para atualizar" do navegador, sem
-   realce azul no toque e sem seleção de texto acidental nas abas. */
+/* Ajustes do app instalado (valem só para /app). */
+
+:root {
+  /* Os avisos (toasts) aparecem logo abaixo da barra do topo do app. */
+  --header-height: calc(env(safe-area-inset-top) + 52px);
+}
+
 html,
 body {
+  /* Sem o "puxar para atualizar" e o quique do navegador: o app tem os seus. */
   overscroll-behavior: none;
   background: var(--surface-base);
 }
 
 body {
   -webkit-tap-highlight-color: transparent;
+  /* Fonte do sistema como reserva enquanto a Inter não chega (ou offline):
+     SF no iPhone, Roboto no Android. */
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-nav a,
-button {
+/* Imagens e controles não abrem o menu de "salvar imagem"/"copiar" ao
+   segurar o dedo, nem ficam selecionados por engano. */
+img {
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+}
+
+nav,
+button,
+[role='button'] {
+  -webkit-touch-callout: none;
   user-select: none;
   -webkit-user-select: none;
 }
 
-/* O mapa ocupa a área que sobra: sem bordas arredondadas do painel. */
+::selection {
+  background: var(--accent-soft);
+}
+
+/* Fundo do mapa enquanto os tiles carregam, no tom do app. */
 .leaflet-container {
   background: #0d130e;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }

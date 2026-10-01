@@ -149,3 +149,35 @@ a:hover {
   white-space: nowrap;
   border: 0;
 }
+
+/* Telas de toque (celular e tablet).
+   O Safari do iPhone dá zoom na página ao focar qualquer campo com letra menor
+   que 16px — e não desfaz depois. Com 16px em todo campo de formulário o zoom
+   nunca acontece, sem tirar do usuário o gesto de pinça (que o
+   maximum-scale=1 tiraria no Android). O !important cobre os campos com
+   estilo próprio (landing, módulos) sem ter de caçar cada um. */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Sem o atraso do "toque duplo para zoom" em botões e links. */
+  a,
+  button,
+  input,
+  label,
+  select,
+  summary,
+  textarea,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+}
+
+/* O iOS aumenta o texto sozinho ao girar a tela. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}

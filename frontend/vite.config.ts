@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite';
 import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import type { OutputBundle, OutputChunk } from 'rollup';
 
@@ -62,12 +63,26 @@ function pwaServiceWorker(): Plugin {
   };
 }
 
+/**
+ * HTTPS de desenvolvimento. Com o certificado de scripts/dev-cert.sh (npm run
+ * dev:cert) instalado no celular, o iPhone baixa o ícone e as telas de
+ * abertura e aceita service worker. Sem ele, um certificado provisório
+ * (basic-ssl): abre depois do aviso, mas o app instalado fica sem ícone.
+ */
+const certDir = path.resolve(__dirname, '.certs');
+const trustedHttps =
+  existsSync(path.join(certDir, 'dev-cert.pem')) && existsSync(path.join(certDir, 'dev-key.pem'))
+    ? { cert: readFileSync(path.join(certDir, 'dev-cert.pem')), key: readFileSync(path.join(certDir, 'dev-key.pem')) }
+    : undefined;
+
 export default defineConfig({
-  plugins: [react(), appRoutes(), pwaServiceWorker()],
+  plugins: [react(), appRoutes(), ...(trustedHttps ? [] : [basicSsl()]), pwaServiceWorker()],
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
   },
+  preview: { https: trustedHttps },
   server: {
+    https: trustedHttps,
     port: 5173,
     host: true,
     // O Vite recusa hosts desconhecidos (proteção contra DNS rebinding).
@@ -77,7 +92,26 @@ export default defineConfig({
     proxy: {
       // Em desenvolvimento o Vite encaminha para o backend, evitando CORS.
       '/api': { target: 'http://localhost:8080', changeOrigin: true },
-      '/ws': { target: 'ws://localhost:8080', ws: true },
+      '/ws': {
+        target: 'ws://localhost:8080',
+        ws: true,
+        // O backend confere a origem do WebSocket (CORS_ORIGINS, por padrão
+        // http://localhost:5173). Com o HTTPS de desenvolvimento e o acesso
+        // pelo IP da rede (celular), a origem vira https://<ip>:5173. Quando a
+        // página é do próprio Vite, o proxy apresenta a origem cadastrada;
+        // origem de outro site passa como veio e continua recusada.
+        configure: (proxy) => {
+          proxy.on('proxyReqWs', (proxyReq, req) => {
+            const origin = req.headers.origin;
+            if (!origin || !req.headers.host) return;
+            try {
+              if (new URL(origin).host === req.headers.host) proxyReq.setHeader('Origin', 'http://localhost:5173');
+            } catch {
+              /* origem malformada: segue como veio */
+            }
+          });
+        },
+      },
     },
   },
   build: {

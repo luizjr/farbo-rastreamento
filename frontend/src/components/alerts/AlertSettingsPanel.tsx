@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import fieldStyles from '@/components/ui/Field.module.css';
+import pageStyles from '@/pages/Page.module.css';
 import { ALERT_STATUS, alertKindLabel, isClock, sameKinds } from '@/services/alerts';
 import { formatDateTime } from '@/services/format';
 import type { AlertKind, AlertKindInfo, AlertSettings, AlertSettingsInput } from '@/types';
@@ -172,12 +173,12 @@ export function AlertSettingsPanel({ settings, audience, saving, onSave, onTest,
           <p className={styles.empty}>Nenhum alerta enviado ainda.</p>
         ) : (
           <div className={styles.tableWrap}>
-            <table className={styles.table}>
+            <table className={`${styles.table} ${pageStyles.stackTable}`}>
               <thead>
                 <tr>
+                  <th>Alerta</th>
                   <th>Quando</th>
                   <th>Veículo</th>
-                  <th>Alerta</th>
                   <th>Situação</th>
                 </tr>
               </thead>
@@ -186,11 +187,6 @@ export function AlertSettingsPanel({ settings, audience, saving, onSave, onTest,
                   const status = ALERT_STATUS[n.status];
                   return (
                     <tr key={n.id}>
-                      <td>{formatDateTime(n.occurredAt)}</td>
-                      <td>
-                        {n.vehicleName || '—'}
-                        {n.plate && <span className={styles.plate}> {n.plate}</span>}
-                      </td>
                       <td>
                         {alertKindLabel(n.kind, settings.catalog)}
                         {n.suppressedCount > 0 && (
@@ -200,9 +196,18 @@ export function AlertSettingsPanel({ settings, audience, saving, onSave, onTest,
                           </span>
                         )}
                       </td>
-                      <td>
-                        <Badge tone={status.tone}>{status.label}</Badge>
-                        {n.pushSent > 0 && <span className={styles.repeats}> e no celular</span>}
+                      <td data-label="Quando">{formatDateTime(n.occurredAt)}</td>
+                      <td data-label="Veículo">
+                        <span>
+                          {n.vehicleName || '—'}
+                          {n.plate && <span className={styles.plate}> {n.plate}</span>}
+                        </span>
+                      </td>
+                      <td data-label="Situação">
+                        <span>
+                          <Badge tone={status.tone}>{status.label}</Badge>
+                          {n.pushSent > 0 && <span className={styles.repeats}> e no celular</span>}
+                        </span>
                       </td>
                     </tr>
                   );

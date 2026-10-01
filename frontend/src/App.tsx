@@ -1,28 +1,40 @@
+import { lazy, Suspense } from 'react';
+import type { ComponentType } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 
-import { AppShell } from '@/components/layout/AppShell';
-import { CustomerDetailsPage } from '@/pages/admin/CustomerDetailsPage';
-import { CustomersPage } from '@/pages/admin/CustomersPage';
-import { InstallersPage } from '@/pages/admin/InstallersPage';
-import { OrdersPage } from '@/pages/admin/OrdersPage';
-import { AlertsPage } from '@/pages/customer/AlertsPage';
-import { InvoicesPage } from '@/pages/customer/InvoicesPage';
-import { MyVehiclesPage } from '@/pages/customer/MyVehiclesPage';
 import { Spinner } from '@/components/ui/Spinner';
 import { ToastProvider } from '@/components/ui/Toast';
 import { RealtimeProvider } from '@/hooks/useRealtime';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { DevicesPage } from '@/pages/DevicesPage';
-import { DiagnosticsPage } from '@/pages/DiagnosticsPage';
-import { EventsPage } from '@/pages/EventsPage';
-import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
-import { GeofencesPage } from '@/pages/GeofencesPage';
 import { LandingPage } from '@/pages/LandingPage';
-import { LoginPage } from '@/pages/LoginPage';
-import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
-import { VehicleDetailsPage } from '@/pages/VehicleDetailsPage';
 import { AuthProvider, useAuth } from '@/stores/AuthContext';
+
+/**
+ * Só a landing vai no pacote inicial: quem chega pelo site (quase sempre no
+ * celular) não baixa o mapa, os comandos e o resto do painel. Cada página do
+ * painel carrega quando é aberta.
+ */
+function page<K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) {
+  return lazy(() => load().then((module) => ({ default: module[name] })));
+}
+
+const AppShell = page(() => import('@/components/layout/AppShell'), 'AppShell');
+const CustomerDetailsPage = page(() => import('@/pages/admin/CustomerDetailsPage'), 'CustomerDetailsPage');
+const CustomersPage = page(() => import('@/pages/admin/CustomersPage'), 'CustomersPage');
+const InstallersPage = page(() => import('@/pages/admin/InstallersPage'), 'InstallersPage');
+const OrdersPage = page(() => import('@/pages/admin/OrdersPage'), 'OrdersPage');
+const AlertsPage = page(() => import('@/pages/customer/AlertsPage'), 'AlertsPage');
+const InvoicesPage = page(() => import('@/pages/customer/InvoicesPage'), 'InvoicesPage');
+const MyVehiclesPage = page(() => import('@/pages/customer/MyVehiclesPage'), 'MyVehiclesPage');
+const DashboardPage = page(() => import('@/pages/DashboardPage'), 'DashboardPage');
+const DevicesPage = page(() => import('@/pages/DevicesPage'), 'DevicesPage');
+const DiagnosticsPage = page(() => import('@/pages/DiagnosticsPage'), 'DiagnosticsPage');
+const EventsPage = page(() => import('@/pages/EventsPage'), 'EventsPage');
+const ForgotPasswordPage = page(() => import('@/pages/ForgotPasswordPage'), 'ForgotPasswordPage');
+const GeofencesPage = page(() => import('@/pages/GeofencesPage'), 'GeofencesPage');
+const LoginPage = page(() => import('@/pages/LoginPage'), 'LoginPage');
+const ResetPasswordPage = page(() => import('@/pages/ResetPasswordPage'), 'ResetPasswordPage');
+const VehicleDetailsPage = page(() => import('@/pages/VehicleDetailsPage'), 'VehicleDetailsPage');
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +54,7 @@ export function App() {
         <AuthProvider>
           <RealtimeProvider>
             <ToastProvider>
+              <Suspense fallback={<Spinner label="Carregando" />}>
               <Routes>
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/landing" element={<LandingPage />} />
@@ -82,6 +95,7 @@ export function App() {
 
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
+              </Suspense>
             </ToastProvider>
           </RealtimeProvider>
         </AuthProvider>

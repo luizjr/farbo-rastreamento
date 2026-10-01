@@ -1,7 +1,9 @@
+import { Suspense } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { NavLink, Outlet } from 'react-router-dom';
 
 import { meApi } from '@/api/resources';
+import { Spinner } from '@/components/ui/Spinner';
 import { useRealtime } from '@/hooks/useRealtime';
 import { useAuth } from '@/stores/AuthContext';
 import { useTheme } from '@/hooks/useTheme';
@@ -142,7 +144,10 @@ export function AppShell() {
       </header>
 
       <main className={styles.content}>
-        <Outlet />
+        {/* As páginas carregam sob demanda: o menu fica e só o conteúdo espera. */}
+        <Suspense fallback={<Spinner label="Carregando" />}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   );

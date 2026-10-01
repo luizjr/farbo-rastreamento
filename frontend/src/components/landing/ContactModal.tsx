@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import styles from './ContactModal.module.css';
+import { useModalBehavior } from './useModalBehavior';
 
 interface ContactModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [selectedPlan, setSelectedPlan] = useState(defaultPlan);
+  useModalBehavior(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -37,7 +39,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({
   return (
     <div className={styles.overlay} onClick={onClose} id="contact-modal-overlay">
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <button className={styles.closeBtn} onClick={onClose} aria-label="Fechar modal">
+        <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Fechar modal">
           ✕
         </button>
 
@@ -53,6 +55,9 @@ export const ContactModal: React.FC<ContactModalProps> = ({
             <input
               id="modal-name"
               type="text"
+              autoComplete="name"
+              autoCapitalize="words"
+              enterKeyHint="next"
               placeholder="Digite seu nome completo"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -65,6 +70,9 @@ export const ContactModal: React.FC<ContactModalProps> = ({
             <input
               id="modal-phone"
               type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              enterKeyHint="next"
               placeholder="(11) 99999-9999"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}

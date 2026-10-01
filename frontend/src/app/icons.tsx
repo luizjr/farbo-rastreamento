@@ -44,3 +44,9 @@ export const BackIcon = () => (
     <path d="M15 18l-6-6 6-6" />
   </svg>
 );
+
+export const ChevronIcon = () => (
+  <svg {...base} width={18} height={18}>
+    <path d="M9 6l6 6-6 6" />
+  </svg>
+);

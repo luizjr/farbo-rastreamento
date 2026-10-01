@@ -516,3 +516,22 @@
   font-size: var(--text-xs);
   max-width: 240px;
 }
+
+/* Celular: o valor em aberto ocupa a linha; os outros dois dividem a de baixo. */
+@media (max-width: 480px) {
+  .tiles {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .tiles > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .tile {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .tiles > :not(:first-child) .tileValue {
+    font-size: var(--text-lg);
+  }
+}

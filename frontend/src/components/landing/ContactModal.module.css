@@ -202,3 +202,39 @@
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(59, 229, 88, 0.5);
 }
+
+/* Celular: painel que sobe de baixo, com rolagem própria — o formulário
+   inteiro (e o botão de enviar) continua alcançável com o teclado aberto. */
+@media (max-width: 560px) {
+  .overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal {
+    max-width: none;
+    max-height: calc(100dvh - 12px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-bottom: 0;
+    border-radius: 22px 22px 0 0;
+    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+    animation: sheetUp 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .modal::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 5px;
+    margin: -0.75rem auto 1rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+  }
+}
+
+@keyframes sheetUp {
+  from {
+    transform: translateY(100%);
+  }
+}

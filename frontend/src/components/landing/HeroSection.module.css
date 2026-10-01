@@ -221,22 +221,42 @@
 
 @media (max-width: 480px) {
   .heroSection {
-    padding-top: 6.5rem;
+    padding-top: 5.5rem;
+    padding-bottom: 1.5rem;
+  }
+  .container {
+    gap: 2rem;
   }
   .mainTitle {
     font-size: 2.25rem;
   }
+  /* Os 5 destaques em 3 + 2, centralizados (antes: 4 + 1 sobrando). */
   .featuresRow {
-    gap: 0.75rem;
+    gap: 1rem 0.5rem;
+    width: 100%;
   }
   .featureItem {
-    width: 75px;
+    width: calc((100% - 1rem) / 3);
   }
   .iconCircle {
     width: 44px;
     height: 44px;
   }
   .featureText {
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
+  }
+  /* O texto manuscrito sai de cima da ilustração e vira uma linha acima dela. */
+  .scriptTextFloat {
+    position: static;
+    transform: rotate(-3deg);
+    margin: 0 auto 1rem;
+    text-align: center;
+    font-size: 1.75rem;
+    line-height: 1.1;
+  }
+  .scriptTextFloat span {
+    display: inline;
+    font-size: 1.35rem;
+    margin: 0 0.3rem;
   }
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { ClientAreaLink } from './ClientAreaLink';
 import styles from './Navbar.module.css';
 
 interface NavbarProps {
@@ -23,6 +23,21 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenModal }) => {
     setMobileMenuOpen(!mobileMenuOpen);
   };
 
+  // Menu aberto: a página atrás não rola e o Esc fecha.
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [mobileMenuOpen]);
+
   const closeMenu = () => {
     setMobileMenuOpen(false);
   };
@@ -39,6 +54,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenModal }) => {
           ) : (
             <img
               src="/assets/logo-header.png"
+              srcSet="/assets/logo-header-480.png 480w, /assets/logo-header.png 956w"
+              sizes="(max-width: 960px) 152px, 196px"
+              width={956}
+              height={176}
               alt="Farbo Rastreadores"
               className={styles.logoImg}
               onError={() => setLogoError(true)}
@@ -46,16 +65,17 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenModal }) => {
           )}
         </a>
 
-        <nav className={`${styles.nav} ${mobileMenuOpen ? styles.navOpen : ''}`}>
+        {mobileMenuOpen && <div className={styles.backdrop} onClick={closeMenu} aria-hidden="true" />}
+        <nav id="menu-principal" className={`${styles.nav} ${mobileMenuOpen ? styles.navOpen : ''}`}>
           <a href="#beneficios" onClick={closeMenu}>Benefícios</a>
           <a href="#planos" onClick={closeMenu}>Planos</a>
           <a href="#como-funciona" onClick={closeMenu}>Como funciona</a>
           <a href="#depoimentos" onClick={closeMenu}>Depoimentos</a>
           <a href="#contato" onClick={closeMenu}>Contato</a>
-          <Link to="/login" className={styles.mobileLoginLink} onClick={closeMenu}>
+          <ClientAreaLink className={styles.mobileLoginLink} onClick={closeMenu}>
             <UserIcon />
             Área do cliente
-          </Link>
+          </ClientAreaLink>
           <button
             className={styles.mobileCtaBtn}
             onClick={() => {
@@ -68,10 +88,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenModal }) => {
         </nav>
 
         <div className={styles.rightActions}>
-          <Link to="/login" className={styles.loginLink} aria-label="Área do cliente">
+          <ClientAreaLink className={styles.loginLink} aria-label="Área do cliente">
             <UserIcon />
             <span>Área do cliente</span>
-          </Link>
+          </ClientAreaLink>
 
           <button
             className={styles.ctaButton}
@@ -83,8 +103,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenModal }) => {
           <button
             className={styles.hamburger}
             onClick={toggleMobileMenu}
-            aria-label="Abrir menu"
+            aria-label={mobileMenuOpen ? 'Fechar menu' : 'Abrir menu'}
             aria-expanded={mobileMenuOpen}
+            aria-controls="menu-principal"
           >
             <span className={`${styles.bar} ${mobileMenuOpen ? styles.bar1Open : ''}`}></span>
             <span className={`${styles.bar} ${mobileMenuOpen ? styles.bar2Open : ''}`}></span>

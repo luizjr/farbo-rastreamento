@@ -169,6 +169,7 @@ export function TrackerMap({
           enabled={following && !track}
           fitTo={track && track.length > 1 ? trackLine : undefined}
         />
+        <MapResize />
       </MapContainer>
 
       {located.length === 0 && !track && (
@@ -245,6 +246,29 @@ function PositionPopup({
       </div>
     </div>
   );
+}
+
+/**
+ * O Leaflet só percebe mudança de tamanho da janela. Quando só o container
+ * muda (painel lateral, lista arrastável do app), ele precisa ser avisado; o
+ * invalidateSize mantém o centro, então o veículo continua no meio.
+ */
+function MapResize() {
+  const map = useMap();
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => map.invalidateSize());
+    });
+    observer.observe(map.getContainer());
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [map]);
+  return null;
 }
 
 /** Centraliza o mapa sem recriar o container a cada atualização. */

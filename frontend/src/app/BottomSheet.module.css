@@ -1,0 +1,95 @@
+/* A lista ocupa a altura toda disponível e desce com translateY: só o
+   transform anima, o que é suave até em celular simples. */
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--app-top) + var(--space-2));
+  bottom: var(--app-bottom);
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+  -webkit-backdrop-filter: saturate(160%) blur(24px);
+  backdrop-filter: saturate(160%) blur(24px);
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 22px 22px 0 0;
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.45);
+  transition: transform 340ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+  /* Enquanto não está aberta, qualquer gesto vertical arrasta a lista. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.header {
+  flex-shrink: 0;
+  padding: 0 var(--space-4) var(--space-2);
+}
+
+.grabber {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  padding: var(--space-2) 0 var(--space-3);
+  background: none;
+  border: 0;
+  cursor: grab;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.grabberBar {
+  width: 38px;
+  height: 5px;
+  border-radius: var(--radius-full);
+  background: var(--border-strong);
+  transition: background var(--transition-fast), width var(--transition-fast);
+}
+
+.grabber:active .grabberBar {
+  width: 46px;
+  background: var(--text-muted);
+}
+
+.titleRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.title {
+  font-size: var(--text-lg);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+/* Aberta: a lista rola; arrastar pela alça ainda recolhe. */
+.open .list {
+  overflow-y: auto;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    transition-duration: 1ms;
+  }
+}

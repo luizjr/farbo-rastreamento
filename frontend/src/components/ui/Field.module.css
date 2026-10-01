@@ -34,6 +34,14 @@
   color: var(--text-muted);
 }
 
+/* Toque: campo alto o bastante para o dedo (44px, o mínimo da Apple). */
+@media (pointer: coarse) {
+  .input,
+  .select {
+    min-height: 44px;
+  }
+}
+
 .textarea {
   min-height: 72px;
   resize: vertical;

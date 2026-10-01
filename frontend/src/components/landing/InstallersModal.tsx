@@ -5,6 +5,7 @@ import { publicApi } from '@/api/resources';
 import type { PublicInstaller } from '@/types';
 
 import styles from './InstallersModal.module.css';
+import { useModalBehavior } from './useModalBehavior';
 
 type Filter = 'todos' | 'moto' | 'carro';
 
@@ -33,16 +34,13 @@ export const InstallersModal: React.FC<InstallersModalProps> = ({ isOpen, onClos
     staleTime: 60_000,
   });
 
+  useModalBehavior(isOpen, onClose);
+
   useEffect(() => {
     if (!isOpen) return;
     setFilter(initialFilter);
     setSearch('');
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [isOpen, initialFilter, onClose]);
+  }, [isOpen, initialFilter]);
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();

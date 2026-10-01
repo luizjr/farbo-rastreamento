@@ -189,3 +189,39 @@
     flex: 1;
   }
 }
+
+/* Toque: chave no tamanho das chaves nativas do iOS e do Android. */
+@media (pointer: coarse) {
+  .switch {
+    width: 50px;
+    height: 30px;
+    margin-top: 0;
+  }
+
+  .switch::after {
+    top: 3px;
+    left: 3px;
+    width: 24px;
+    height: 24px;
+  }
+
+  .switch:checked::after {
+    transform: translateX(20px);
+  }
+
+  .item {
+    padding: var(--space-4) 0;
+  }
+
+  /* "das [22:00] às [06:00]" numa linha só: os dois horários dividem o espaço. */
+  .guard {
+    flex-wrap: nowrap;
+  }
+
+  .clock {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-left: var(--space-2);
+    padding-right: var(--space-2);
+  }
+}

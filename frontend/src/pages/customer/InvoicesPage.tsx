@@ -108,7 +108,7 @@ export function InvoicesPage() {
             />
           ) : (
             <div className={styles.tableWrap}>
-              <table className={styles.table}>
+              <table className={`${styles.table} ${styles.stackTable}`}>
                 <thead>
                   <tr>
                     <th>Descrição</th>
@@ -122,9 +122,9 @@ export function InvoicesPage() {
                   {(invoices.data ?? []).map((invoice) => (
                     <tr key={invoice.id}>
                       <td>{invoice.description}</td>
-                      <td>{formatDateOnly(invoice.dueDate)}</td>
-                      <td className={billing.amount}>{formatMoney(invoice.amountCents)}</td>
-                      <td>
+                      <td data-label="Vencimento">{formatDateOnly(invoice.dueDate)}</td>
+                      <td data-label="Valor" className={billing.amount}>{formatMoney(invoice.amountCents)}</td>
+                      <td data-label="Situação">
                         <InvoiceStatus invoice={invoice} />
                       </td>
                       <td>
@@ -153,7 +153,7 @@ export function InvoicesPage() {
             />
           ) : (
             <div className={styles.tableWrap}>
-              <table className={styles.table}>
+              <table className={`${styles.table} ${styles.stackTable}`}>
                 <thead>
                   <tr>
                     <th>Plano</th>
@@ -166,9 +166,9 @@ export function InvoicesPage() {
                   {(subscriptions.data ?? []).map((subscription) => (
                     <tr key={subscription.id}>
                       <td>{subscription.planName}</td>
-                      <td className={billing.amount}>{formatMoney(subscription.priceCents)}</td>
-                      <td>todo dia {subscription.dueDay}</td>
-                      <td>
+                      <td data-label="Valor mensal" className={billing.amount}>{formatMoney(subscription.priceCents)}</td>
+                      <td data-label="Vencimento">todo dia {subscription.dueDay}</td>
+                      <td data-label="Situação">
                         {subscription.status === 'ACTIVE' ? (
                           <Badge tone="success" dot>
                             Ativa

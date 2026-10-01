@@ -24,6 +24,7 @@ import {
 } from '@/services/format';
 
 import { BackIcon } from '../icons';
+import { isIos } from '../pwa';
 import { directionsUrl, summarizeTrip, tripWindow } from '../trip';
 import type { TripRange } from '../trip';
 import { statusTone } from './MapScreen';
@@ -72,9 +73,17 @@ export function VehicleScreen() {
   const battery = state?.batteryPercent ?? position?.batteryPercent ?? null;
   const gsm = state?.gsmLevel ?? position?.gsmLevel ?? null;
 
+  // Aberto direto no veículo (toque na notificação), não há tela anterior no
+  // app: voltar leva ao mapa em vez de sair do app.
+  const goBack = () => {
+    const state = window.history.state as { idx?: number } | null;
+    if (state?.idx) navigate(-1);
+    else navigate('/mapa', { replace: true });
+  };
+
   const share = async () => {
     if (!position) return;
-    const url = directionsUrl(position.latitude, position.longitude);
+    const url = directionsUrl(position.latitude, position.longitude, isIos());
     try {
       if (navigator.share) {
         await navigator.share({ title: vehicle.name, text: `Localização de ${vehicle.name}`, url });
@@ -89,12 +98,12 @@ export function VehicleScreen() {
 
   return (
     <div className={styles.screen}>
-      <div className={styles.header}>
-        <button type="button" className={styles.back} onClick={() => navigate(-1)} aria-label="Voltar">
+      <div className={styles.navbar}>
+        <button type="button" className={styles.back} onClick={goBack} aria-label="Voltar">
           <BackIcon />
         </button>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <h1 className={styles.title}>{vehicle.name}</h1>
+        <div className={styles.navTitle}>
+          <h1>{vehicle.name}</h1>
           {vehicle.plate && <span className={styles.plate}>{vehicle.plate}</span>}
         </div>
         <Badge tone={statusTone(vehicle)} dot>
@@ -140,7 +149,7 @@ export function VehicleScreen() {
             </div>
           </div>
           <div className={styles.row}>
-            <Button variant="secondary" onClick={() => openExternal(directionsUrl(position.latitude, position.longitude))}>
+            <Button variant="secondary" onClick={() => openExternal(directionsUrl(position.latitude, position.longitude, isIos()))}>
               Como chegar
             </Button>
             <Button variant="secondary" onClick={share}>

@@ -1,23 +1,51 @@
-/* Moldura do app: ocupa a tela inteira do celular e respeita o entalhe e a
-   barra de gestos (env(safe-area-inset-*)). */
+/* Moldura do app. O conteúdo rola por baixo do topo e das abas, que são
+   translúcidas (vidro fosco, como no iOS); --app-top e --app-bottom dizem
+   onde o conteúdo começa e termina. Tudo respeita o entalhe, a ilha dinâmica
+   e a barra de gestos (env(safe-area-inset-*)). */
 .app {
-  display: flex;
-  flex-direction: column;
-  height: 100dvh;
+  --app-top: calc(env(safe-area-inset-top) + 52px);
+  /* Folga das abas até a barra de gestos do iPhone: a área segura inteira
+     (34pt) deixava uma faixa vazia grande sob os nomes; 20pt ainda ficam bem
+     acima do "risquinho" de voltar ao início. Sem barra de gestos, 8px. */
+  --tab-gap: max(calc(env(safe-area-inset-bottom) - 14px), 8px);
+  --app-bottom: calc(64px + var(--tab-gap));
+  --glass: color-mix(in srgb, var(--surface-sunken) 72%, transparent);
+  /* Preso às bordas da janela (e não height: 100dvh, que no iPhone instalado
+     não bate com a área desenhada). */
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
   background: var(--surface-base);
 }
 
-/* Três colunas: a do meio (logo) fica sempre no centro da tela, e o
-   indicador de tempo real ocupa a da direita sem empurrá-la. */
+/* --- Topo ------------------------------------------------------------------ */
+
+.header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 900;
+  background: var(--glass);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Três colunas: a logo fica sempre no centro da tela e o indicador de tempo
+   real ocupa a da direita sem empurrá-la. */
 .topbar {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   column-gap: var(--space-2);
-  padding: calc(env(safe-area-inset-top) + var(--space-2)) var(--space-4) var(--space-2);
-  background: var(--surface-sunken);
-  border-bottom: 1px solid var(--border-subtle);
-  flex-shrink: 0;
+  /* 52px para a logo abaixo da barra de status/ilha (o padding entra na
+     conta do min-height). */
+  min-height: calc(52px + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) max(var(--space-4), env(safe-area-inset-right)) 0
+    max(var(--space-4), env(safe-area-inset-left));
 }
 
 .logo {
@@ -29,6 +57,8 @@
   display: block;
   height: 28px;
   width: auto;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
 }
 
 .live {
@@ -37,25 +67,40 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
   font-size: var(--text-xs);
+  font-weight: 600;
   color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface-hover) 60%, transparent);
 }
 
 .live::before {
   content: '';
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--text-muted);
 }
 
 .liveOn {
   color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .liveOn::before {
   background: var(--accent);
-  box-shadow: 0 0 8px var(--accent-glow);
+  animation: pulse 2.4s ease-out infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-glow);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 7px transparent;
+  }
 }
 
 /* Tela estreita: o indicador vira só a bolinha e a logo inteira continua
@@ -64,77 +109,220 @@
   .liveLabel {
     display: none;
   }
+
+  .live {
+    padding: 6px;
+  }
 }
 
 .banner {
   display: block;
   width: 100%;
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--text-sm);
-  text-align: left;
-  color: var(--text-primary);
-  background: var(--warning-soft);
-  border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
-  text-decoration: none;
-  flex-shrink: 0;
+  padding: var(--space-2) max(var(--space-4), env(safe-area-inset-right)) var(--space-2)
+    max(var(--space-4), env(safe-area-inset-left));
   font: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  text-align: center;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
+  text-decoration: none;
   cursor: pointer;
 }
 
 .bannerDanger {
-  background: var(--danger-soft);
-  border-bottom-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 20%, transparent);
+  border-top-color: color-mix(in srgb, var(--danger) 35%, transparent);
 }
 
 .bannerAccent {
   background: var(--accent-soft);
-  border-bottom-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  border-top-color: color-mix(in srgb, var(--accent) 35%, transparent);
   font-weight: 600;
 }
 
+/* --- Conteúdo -------------------------------------------------------------- */
+
 .content {
-  flex: 1;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
+  padding: var(--app-top) env(safe-area-inset-right) var(--app-bottom) env(safe-area-inset-left);
+  scroll-padding-top: calc(var(--app-top) + var(--space-3));
+  /* As páginas do painel usadas aqui (Veículos, Faturas) não rolam sozinhas:
+     quem rola é a moldura. */
+  --page-height: auto;
+  --page-overflow: visible;
+  --page-padding: var(--space-4);
 }
 
+.fullBleed {
+  padding: 0;
+  overflow: hidden;
+}
+
+.page {
+  min-height: 100%;
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fullBleed .page {
+  height: 100%;
+}
+
+.pageDragging {
+  transition: none;
+}
+
+.push {
+  animation: push 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pop {
+  animation: pop 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fade {
+  animation: fade 200ms ease-out;
+}
+
+@keyframes push {
+  from {
+    opacity: 0.4;
+    transform: translateX(28%);
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0.4;
+    transform: translateX(-18%);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* --- Puxar para atualizar ------------------------------------------------- */
+
+.pull {
+  position: absolute;
+  top: var(--app-top);
+  left: 50%;
+  z-index: 800;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  background: var(--surface-overlay);
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  transition:
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 200ms ease;
+}
+
+.pullDragging {
+  transition: none;
+}
+
+.pullSpinning {
+  animation: spin 700ms linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: translate(-50%, 10px) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, 10px) rotate(360deg);
+  }
+}
+
+/* --- Abas ------------------------------------------------------------------ */
+
 .tabbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 900;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  padding: var(--space-1) var(--space-1) calc(env(safe-area-inset-bottom) + var(--space-1));
-  background: var(--surface-sunken);
-  border-top: 1px solid var(--border-subtle);
-  flex-shrink: 0;
+  height: var(--app-bottom);
+  padding: 0 max(var(--space-1), env(safe-area-inset-right)) var(--tab-gap)
+    max(var(--space-1), env(safe-area-inset-left));
+  background: var(--glass);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  transition: transform 220ms ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Com o teclado aberto (campo em foco), as abas saem do caminho. */
+.app:has(input:not([type='checkbox']):not([type='radio']):focus, select:focus, textarea:focus) .tabbar {
+  transform: translateY(110%);
 }
 
 .tab {
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* Ícone e nome no meio da faixa de 64px: respiro igual em cima e embaixo. */
+  justify-content: center;
   gap: 2px;
-  padding: var(--space-2) 0;
   color: var(--text-muted);
   text-decoration: none;
-  border-radius: var(--radius-md);
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+.tab:hover {
+  text-decoration: none;
+}
+
+/* Pílula atrás do ícone da aba ativa (Material 3 no Android; no iPhone lê
+   como o destaque da aba). */
+.tabIcon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  transition:
+    background 220ms ease,
+    transform 160ms ease;
+}
+
+.tab:active .tabIcon {
+  transform: scale(0.9);
 }
 
 .tabActive {
   color: var(--accent);
 }
 
-.tabIcon {
-  position: relative;
-  display: inline-flex;
+.tabActive .tabIcon {
+  background: var(--accent-soft);
 }
 
 .dot {
   position: absolute;
-  top: -2px;
-  right: -4px;
+  top: 2px;
+  right: 12px;
   width: 9px;
   height: 9px;
   border-radius: 50%;
@@ -145,4 +333,24 @@
 .tabLabel {
   font-size: 0.6875rem;
   font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.tabActive .tabLabel {
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .push,
+  .pop,
+  .fade,
+  .liveOn::before {
+    animation: none;
+  }
+
+  .page,
+  .tabbar,
+  .tabIcon {
+    transition: none;
+  }
 }
